@@ -212,6 +212,7 @@ def run_update(config_path: str) -> None:
 
         df_raw = pd.DataFrame()
         used_source = source
+        fetched_ok = False
         if source == "binance":
             last_exc = None
             for endpoint in binance_endpoints:
@@ -226,17 +227,18 @@ def run_update(config_path: str) -> None:
                     if df_raw.empty:
                         raise RuntimeError(f"Empty dataset from {endpoint}")
                     used_source = f"binance:{endpoint}"
+                    fetched_ok = True
                     break
                 except Exception as exc:
                     last_exc = exc
                     continue
-            if df_raw.empty:
+            if not fetched_ok:
                 used_source = "synthetic_fallback"
                 print(
                     f"[WARN] Binance fetch failed for {branch_name}: {last_exc}. Falling back to synthetic data."
                 )
 
-        if used_source != "binance":
+        if not fetched_ok:
             df_raw = generate_synthetic_ohlcv(interval, start_utc, end_utc, seed=seed)
 
         out_df = finalize_ohlcv_df(df_raw, interval=interval, market_tz=market_tz)

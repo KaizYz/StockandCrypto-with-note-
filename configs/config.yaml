@@ -95,3 +95,160 @@ backtest:
   p_up_short: 0.45
   fee_bps: 10
   slippage_bps: 10
+
+backtest_multi_market:
+  enabled: true
+  lookback_days:
+    crypto: 540
+    cn_equity: 1200
+    us_equity: 1200
+  min_train_size: 180
+  test_size: 60
+  max_folds: 4
+  max_symbols_per_market:
+    crypto: 8
+    cn_equity: 8
+    us_equity: 8
+  strategies: ["policy", "buy_hold", "ma_crossover", "naive_prev_bar"]
+  impact:
+    lambda_bps: 1.0
+    beta: 0.5
+  risk_exits:
+    enabled: true
+    stop_loss_pct: 0.015
+    take_profit_pct: 0.03
+
+policy:
+  thresholds:
+    p_bull: 0.55
+    p_bear: 0.45
+    ret_threshold: 0.002
+  execution:
+    fee_bps: 10
+    slippage_bps: 10
+    max_position: 1.0
+    min_position: 0.01
+  sizing:
+    uncertainty_scale: 12.0
+    fallback_half_width_pct: 0.01
+    confidence_power: 1.0
+  risk_scale:
+    by_level:
+      low: 1.0
+      medium: 0.8
+      high: 0.6
+      extreme: 0.4
+    by_volatility:
+      enabled: false
+      bands: [0.02, 0.05, 0.10]
+      scales: [1.0, 0.8, 0.6, 0.4]
+  market_rules:
+    crypto:
+      allow_short_perp: true
+      allow_short_spot: false
+      allow_short_default: true
+    cn_equity:
+      allow_short: false
+    us_equity:
+      allow_short: true
+
+market_snapshot:
+  enabled: true
+  output_csv: "data/processed/market_snapshot.csv"
+  output_json: "data/processed/market_snapshot.json"
+  instruments:
+    - id: "btc"
+      name: "BTC/USDT"
+      market: "crypto"
+      provider: "binance"
+      symbol: "BTCUSDT"
+      timezone: "Asia/Shanghai"
+      horizon_unit: "hour"
+      horizon_steps: 4
+      history_lookback_days: 365
+    - id: "aapl"
+      name: "AAPL"
+      market: "us_equity"
+      provider: "yahoo"
+      symbol: "AAPL"
+      timezone: "America/New_York"
+      horizon_unit: "day"
+      horizon_steps: 3
+      history_lookback_days: 730
+    - id: "moutai"
+      name: "贵州茅台"
+      market: "cn_equity"
+      provider: "yahoo"
+      symbol: "600519.SS"
+      timezone: "Asia/Shanghai"
+      horizon_unit: "day"
+      horizon_steps: 3
+      history_lookback_days: 730
+
+tracking:
+  enabled: true
+  output_dir: "data/processed/tracking"
+  snapshot_workers: 8
+  universes:
+    crypto: ["top100_ex_stable"]
+    cn_equity: ["sse_composite", "csi300"]
+    us_equity: ["dow30", "nasdaq100", "sp500"]
+  max_symbols_per_pool:
+    crypto: 10
+    cn_equity: 10
+    us_equity: 10
+  market_defaults:
+    crypto:
+      timezone: "Asia/Shanghai"
+      horizon_unit: "hour"
+      horizon_steps: 4
+      history_lookback_days: 365
+    cn_equity:
+      timezone: "Asia/Shanghai"
+      horizon_unit: "day"
+      horizon_steps: 3
+      history_lookback_days: 730
+    us_equity:
+      timezone: "America/New_York"
+      horizon_unit: "day"
+      horizon_steps: 3
+      history_lookback_days: 730
+  hard_filters:
+    min_history_bars: 180
+    max_missing_rate: 0.05
+    min_market_cap_usd: 1000000000
+  action_rules:
+    min_predicted_change_pct: 0.0
+    min_factor_support_count: 2
+
+forecast_config:
+  trend_labels:
+    p_bull: 0.55
+    p_bear: 0.45
+    ret_threshold: 0.002
+  confidence_score:
+    w_prob: 0.6
+    w_width: 0.4
+    w_recent_perf: 0.0
+  session_aggregation:
+    method: "weighted_mean"  # weighted_mean / simple_mean
+    weight_field: "confidence_score"
+  hourly:
+    horizon_hours: 4
+  daily:
+    lookforward_days: 14
+  seasonality:
+    window_days: 180
+  build_modes: ["forecast", "seasonality"]
+  symbols:
+    default: ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+  data_source:
+    exchanges: ["binance", "bybit"]
+    market_types: ["perp", "spot"]
+    default_exchange: "binance"
+    default_market_type: "perp"
+    binance_spot_endpoints:
+      - "https://api.binance.com"
+      - "https://api.binance.us"
+    binance_perp_endpoints:
+      - "https://fapi.binance.com"

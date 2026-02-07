@@ -102,6 +102,17 @@ def _build_single_branch_features(
         out[f"volume_ma_{w}"] = out["volume"].rolling(w).mean()
     out["obv"] = _obv(out["close"], out["volume"])
 
+    # Cross-asset quant-style factor proxies for MVP:
+    # size/value/growth + momentum/reversal/low-volatility.
+    dollar_volume = (out["close"].abs() * out["volume"].abs()).replace(0, np.nan)
+    out["factor_size_proxy"] = np.log(dollar_volume.rolling(20).mean())
+    rolling_high_252 = out["close"].rolling(252).max()
+    out["factor_value_proxy"] = (rolling_high_252 - out["close"]) / (rolling_high_252 + 1e-12)
+    out["factor_growth_proxy"] = out["close"].pct_change(90)
+    out["factor_momentum_20"] = out["close"].pct_change(20)
+    out["factor_reversal_5"] = -out["close"].pct_change(5)
+    out["factor_low_vol_20"] = -out["return_1"].rolling(20).std()
+
     if branch_cfg.get("time_features", "hourly") == "hourly":
         out["hour_of_day"] = out["timestamp_market_dt"].dt.hour
     out["day_of_week"] = out["timestamp_market_dt"].dt.dayofweek
@@ -166,4 +177,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

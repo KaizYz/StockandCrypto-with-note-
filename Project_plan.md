@@ -1,541 +1,445 @@
-# CS 487 Senior Project 完整方案（Detailed Plan · v2 工程落地版）
-**项目名称（建议）**  
-**BTC 市场趋势与波动预测系统：小时级 + 日线级的方向、启动时间与幅度区间联合预测**
+# å¤šå¸‚åœºè¶‹åŠ¿ä¸Žæ³¢åŠ¨é¢„æµ‹ç³»ç»Ÿï¼ˆBTC + ä¸­å›½Aè‚¡ + ç¾Žè‚¡ï¼‰
+**å¤šæ—¶é—´æ¡†æž¶è¾“å‡º**ï¼šæ–¹å‘æ¦‚çŽ‡ + å¯åŠ¨çª—å£æ¦‚çŽ‡ + å¹…åº¦/æ”¶ç›ŠçŽ‡åŒºé—´
 
 ---
 
-## 0. 项目一句话定义（Scope Lock）
-构建一个端到端预测系统，面向 BTC（后续可扩展到美股等），在 **小时级（1–4h）** 与 **日线级（1–7d）** 两个时间尺度上，输出：
-- **方向概率**（涨/跌）
-- **启动时间窗口**（什么时候开始明显上涨/下跌）
-- **幅度/目标区间**（能涨到多少/跌到多少，给区间而不是单点）
-并通过 **Dashboard** 展示预测结果与严格的 **walk-forward** 评估表现（不进行真实交易执行）。
+## 1ï¼‰ä¸€å¥è¯èŒƒå›´ï¼ˆScope Lockï¼‰
+æž„å»ºä¸€ä¸ªç«¯åˆ°ç«¯é¢„æµ‹ç³»ç»Ÿï¼Œä¸»è¦é¢å‘åŠ å¯†å¸‚åœºï¼ˆä¼˜å…ˆ Top 3ï¼šBTCã€ETHã€SOLï¼‰ï¼Œå¹¶è®¾è®¡å¯æ‰©å±•æž¶æž„ä»¥æ”¯æŒä¸­å›½ A è‚¡ä¸Žç¾Žè‚¡ã€‚ç³»ç»Ÿåœ¨ **å°æ—¶çº§ï¼ˆ1â€“4hï¼‰** ä¸Ž **æ—¥çº¿çº§ï¼ˆ1â€“7dï¼‰** ä¸¤ä¸ªæ—¶é—´å°ºåº¦ä¸Šè¾“å‡º **æ–¹å‘æ¦‚çŽ‡**ã€**å¯åŠ¨çª—å£æ¦‚çŽ‡** ä¸Ž **å¹…åº¦/æ”¶ç›ŠçŽ‡åŒºé—´**ï¼Œå¹¶é€šè¿‡ Dashboard å±•ç¤ºç»“æžœï¼›å…¨æµç¨‹é‡‡ç”¨ä¸¥æ ¼çš„ **walk-forward** æ—¶é—´åºåˆ—è¯„ä¼°ï¼Œå¹¶æä¾›å¯å¤çŽ°çš„æ•°æ®æµæ°´çº¿ä¸Žè®­ç»ƒæµç¨‹ã€‚
 
 ---
 
-## 1. 项目背景与动机
-加密市场高波动、快节奏。仅预测“明天涨还是跌”不足以支持分析与决策。交易者/分析者更在意：
-- **未来会涨还是跌（Direction）**
-- **什么时候开始涨/跌（Start Time）**
-- **大概能涨到多少 / 跌到多少（Magnitude / Target Range）**
+## 2ï¼‰åŠ¨æœºï¼ˆWhy this projectï¼‰
+åœ¨å¿«é€Ÿå˜åŒ–çš„å¸‚åœºä¸­ï¼Œä»…å›žç­”â€œæ˜Žå¤©æ¶¨è¿˜æ˜¯è·Œâ€ä¸å¤Ÿã€‚äº¤æ˜“è€…/åˆ†æžè€…æ›´å…³æ³¨ï¼š
 
-因此，本项目目标是开发一个可复现、可评估的预测系统，在多时间尺度上输出“方向 + 启动 + 幅度区间”，并提供工程化实现与可视化展示。  
-> **免责声明**：本项目仅用于研究与分析，不构成投资建议，不执行自动交易。
+- **æ–¹å‘ï¼ˆDirectionï¼‰**ï¼šä¸Šæ¶¨ vs ä¸‹è·Œçš„æ¦‚çŽ‡
+- **æ—¶æœºï¼ˆTimingï¼‰**ï¼šæ˜¾è‘—è¡Œæƒ…æ›´å¯èƒ½åœ¨ä»€ä¹ˆæ—¶å€™å¼€å§‹
+- **å¹…åº¦ï¼ˆMagnitudeï¼‰**ï¼šå¯èƒ½èµ°å¤šè¿œï¼ˆåŒºé—´æ¯”å•ç‚¹æ›´å®žç”¨ï¼‰
 
----
-
-## 2. 项目目标（What I will deliver）
-
-### 2.1 核心预测能力（Two Timeframes）
-#### A. 小时级（1H 数据）
-- **预测 horizon**：`1h / 2h / 4h`
-- **输出**：
-  - 方向：`P(up)`、`P(down)`
-  - 启动窗口：`0–1h / 1–2h / 2–4h`（输出 Top-1 或每窗概率）
-  - 幅度：未来收益率的 `q10 / q50 / q90`（区间预测），可选 high/low 版本
-
-#### B. 日线级（1D 数据）
-- **预测 horizon**：`1d / 3d / 7d`（可选 30d）
-- **输出**：
-  - 方向：`P(up)`、`P(down)`
-  - 启动窗口：`0–1d / 1–3d / 3–7d`
-  - 幅度：未来收益率的 `q10 / q50 / q90`（区间预测）
-
-### 2.2 系统交付（End-to-End Deliverables）
-- 数据收集与增量更新脚本（可复现）
-- 特征工程模块（可复现）
-- 标签生成模块（方向 / 启动 / 幅度区间）
-- 模型训练、调参、评估（walk-forward）、保存与加载
-- 模型对比报告（Baseline / MVP / Advanced）
-- Dashboard（展示预测、区间、指标、baseline 对比）
-- （加分）轻量回测：加入手续费/滑点/延迟，检验预测是否有边际价值
+æœ¬é¡¹ç›®å°†æž„å»ºä¸€ä¸ªå¯å¤çŽ°ç³»ç»Ÿï¼Œåœ¨å¤šä¸ªé¢„æµ‹çª—å£ä¸ŠåŒæ—¶å›žç­”ä¸Šè¿°ä¸‰ä¸ªé—®é¢˜ï¼Œå¹¶ç”¨ä¸¥æ ¼è¯„ä¼°ä¿è¯ç»“è®ºå¯ä¿¡ã€‚
 
 ---
 
-## 3. 任务定义（把“想法”变成可训练目标）
-本项目拆成 **三个任务**（在 Hourly 与 Daily 分支都做同样定义，只是时间单位不同）：
+## 3ï¼‰äº¤ä»˜ç‰©ï¼ˆDeliverablesï¼‰
+### ç«¯åˆ°ç«¯ã€å¯å¤çŽ°ç³»ç»Ÿ
+- æ•°æ®æŽ¥å…¥ + å¢žé‡æ›´æ–°ï¼ˆå¯é‡å¤æ‰§è¡Œï¼‰
+- æ•°æ®éªŒè¯ + æ•°æ®è´¨é‡æŠ¥å‘Šï¼ˆdata_quality_reportï¼‰
+- ç‰¹å¾å·¥ç¨‹æ¨¡å—ï¼ˆconfig é©±åŠ¨ï¼‰
+- æ ‡ç­¾ç”Ÿæˆï¼ˆæ–¹å‘ / å¯åŠ¨çª—å£ / å¹…åº¦ï¼‰
+- æ¨¡åž‹è®­ç»ƒ + è°ƒå‚ + walk-forward è¯„ä¼°
+- ä¿å­˜æ¨¡åž‹äº§ç‰©ï¼ˆåŒ…å« config å¿«ç…§ + metrics + ç‰ˆæœ¬å·/æ—¶é—´æˆ³ï¼‰
+- Dashboardï¼ˆé¢„æµ‹ + åŒºé—´ + è¡¨çŽ° + baseline å¯¹æ¯”ï¼‰
 
-### 3.1 任务 1：方向预测（Direction Classification）
-对每个 horizon `h`，定义未来收益率：
+---
+
+## 4ï¼‰é—®é¢˜å»ºæ¨¡ï¼ˆä¸‰ä¸ªä»»åŠ¡ï¼‰
+å°æ—¶çº§ä¸Žæ—¥çº¿çº§é‡‡ç”¨**åŒæ ·çš„ä¸‰ç±»ä»»åŠ¡**ï¼Œåªæ˜¯æ—¶é—´å•ä½ä¸åŒã€‚
+
+### ä»»åŠ¡ 1ï¼šæ–¹å‘é¢„æµ‹ï¼ˆDirection Classificationï¼‰
+å¯¹é¢„æµ‹çª—å£ `h` å®šä¹‰æœªæ¥æ”¶ç›ŠçŽ‡ï¼š
 - `r(t,h) = (Close[t+h] - Close[t]) / Close[t]`
-- `y_dir(t,h) = 1 if r(t,h) > 0 else 0`
 
-**输出**：`P(up)` 与 `P(down)=1-P(up)`  
-**horizon**：  
-- Hourly：`{1h,2h,4h}`  
-- Daily：`{1d,3d,7d}`
+æ ‡ç­¾ï¼š
+- `y_dir(t,h) = 1  (å½“ r(t,h) > 0)`
+- `y_dir(t,h) = 0  (å¦åˆ™)`
 
----
+è¾“å‡ºï¼š
+- `P(up)`
+- `P(down) = 1 - P(up)`
 
-### 3.2 任务 2：趋势启动时间预测（Start Time Window Prediction）
-目标是预测“**显著走势**”更可能在哪个时间窗启动。
-
-#### 3.2.1 启动事件定义（数据驱动阈值）
-定义“显著启动”触发条件：在未来的累计收益率首次达到阈值。
-- 先计算未来 k 步的累计收益率 `r(t,k)`
-- 定义阈值 `thr`（不要拍脑袋，使用历史分位数自动设定）：
-  - Hourly：过去一年（或可用数据范围）1H `|r|` 的 `80% 分位数` → `thr_h`
-  - Daily：过去五年（或可用范围）1D `|r|` 的 `80% 分位数` → `thr_d`
-- 启动时刻：
-  - `τ = min k such that |r(t,k)| >= thr`
-  - 若在目标 horizon 内不存在该 k，则标记为 `no_start`
-
-> 可选方案：用未来 realized volatility 触发（更稳但实现略复杂），本方案 MVP 用收益率阈值即可。
-
-#### 3.2.2 时间窗划分
-**Hourly 窗口**
-- `W0: no_start`（在 4h 目标窗口内未触发）
-- `W1: 0–1h`
-- `W2: 1–2h`
-- `W3: 2–4h`
-
-**Daily 窗口**
-- `W0: no_start`（在 7d 目标窗口内未触发）
-- `W1: 0–1d`
-- `W2: 1–3d`
-- `W3: 3–7d`
-
-**输出形式（MVP 推荐）**
-- 多分类：输出最可能窗口 `argmax P(Wi)`  
-- 或输出每个窗口概率 `P(W0),P(W1),P(W2),P(W3)`
+é¢„æµ‹çª—å£ï¼ˆHorizonsï¼‰
+- **å°æ—¶çº§**ï¼š1h / 2h / 4h
+- **æ—¥çº¿çº§**ï¼š1d / 3d / 7dï¼ˆå¯é€‰ 30dï¼‰
 
 ---
 
-### 3.3 任务 3：幅度/目标区间预测（Magnitude + Interval）
-你要的是“涨到/跌到多少”，更适合用**区间预测**。
+### ä»»åŠ¡ 2ï¼šå¯åŠ¨æ—¶é—´çª—å£é¢„æµ‹ï¼ˆStart Time Window Predictionï¼Œå¤šåˆ†ç±»ï¼‰
+ç›®æ ‡ï¼šé¢„æµ‹æœªæ¥å“ªä¸ªæ—¶é—´çª—æœ€å¯èƒ½åŒ…å«**ç¬¬ä¸€æ¬¡æ˜¾è‘—æ³¢åŠ¨/æ˜¾è‘—èµ°åŠ¿å¯åŠ¨**ã€‚
 
-#### 3.3.1 MVP：收益率区间预测（Quantile Regression）
-- 目标：`y_ret(t,h) = r(t,h)`
-- 输出：`q10 / q50 / q90` 三个分位数  
-示例输出：未来 `4h` 收益率中位数 `+0.6%`，区间 `[-0.2%, +1.4%]`
+#### 2.1 å¯åŠ¨äº‹ä»¶å®šä¹‰ï¼ˆæ•°æ®é©±åŠ¨é˜ˆå€¼ï¼‰
+- è®¡ç®—æœªæ¥ç´¯è®¡æ”¶ç›ŠçŽ‡ `r(t,k)`ï¼ˆk ä¸ºæœªæ¥æ­¥æ•°ï¼šå°æ—¶/å¤©ï¼‰
+- å®šä¹‰é˜ˆå€¼ `thr`ï¼ˆç”¨åŽ†å²åˆ†ä½æ•°è‡ªåŠ¨è®¾å®šï¼Œé¿å…çŒœæµ‹ï¼‰ï¼š
+  - **å°æ—¶çº§**ï¼šåŽ†å² 1H `|r|` çš„ 80% åˆ†ä½æ•° â†’ `thr_h`
+  - **æ—¥çº¿çº§**ï¼šåŽ†å² 1D `|r|` çš„ 80% åˆ†ä½æ•° â†’ `thr_d`
+- å¯åŠ¨æ—¶é—´ï¼š
+  - `Ï„ = min { k : |r(t,k)| â‰¥ thr }`
+- è‹¥åœ¨ç›®æ ‡ horizon å†…éƒ½æœªè§¦å‘ï¼Œåˆ™è®°ä¸º `no_start`
 
-**训练方式（必须写清楚）**
-- 对每个分位数 `q`，训练一个 Quantile Model（LightGBM quantile objective）
-- 使用 **Pinball Loss（分位数损失）**：
-  - `L_q(y,ŷ) = max(q*(y-ŷ), (q-1)*(y-ŷ))`
+#### 2.2 çª—å£åˆ†æ¡¶ï¼ˆWindow binsï¼‰
+**å°æ—¶çº§ï¼ˆç›®æ ‡ 4 å°æ—¶å†…ï¼‰**
+- `W0: no_start`
+- `W1: 0â€“1h`
+- `W2: 1â€“2h`
+- `W3: 2â€“4h`
 
-**区间评估指标（必须补充）**
-- **Coverage**：实际值落在 `[q10,q90]` 的比例（目标接近 80%）
-- **Interval Width**：区间宽度（越窄越好，但不能牺牲 coverage）
-- （可选）Winkler Score / Pinball Loss 汇总
+**æ—¥çº¿çº§ï¼ˆç›®æ ‡ 7 å¤©å†…ï¼‰**
+- `W0: no_start`
+- `W1: 0â€“1d`
+- `W2: 1â€“3d`
+- `W3: 3â€“7d`
 
-#### 3.3.2 增强：预测未来窗口 High/Low（更贴近“目标价”）
-- `y_high(t,h) = (max_high_in_next_h - Close[t]) / Close[t]`
-- `y_low(t,h)  = (min_low_in_next_h  - Close[t]) / Close[t]`
-输出最大上冲与最大回撤，适合作为增强项。
-
----
-
-## 4. 数据方案（Data）
-
-### 4.1 数据粒度
-- Hourly branch：`1H OHLCV`
-- Daily branch：`1D OHLCV`
-
-### 4.2 数据源（优先级）
-1. Binance API（或 ccxt）
-2. CoinGecko（备选）
-3. Yahoo Finance（备选，日线更稳）
-
-### 4.3 市场时区规则（你指定的标准）
-> **统一规则（用于展示、对齐“市场日历”概念）**：
-- **加密（Crypto）统一使用北京时间（Asia/Shanghai）**
-- **亚盘（Asia session）统一使用北京时间（Asia/Shanghai）**
-- **美股（US equities）统一使用美东时间（America/New_York）**
-
-**工程建议（为了不出错）**
-- 存储层建议保留 `timestamp_utc`（避免夏令时/跨时区混乱）
-- 业务层再生成：
-  - `timestamp_market`（BTC=北京时间，美股=美东时间）
-  - 并在 Dashboard 明确标注时区
-
-> 这样同时满足“统一市场时区”的需求，又避免数据工程层面踩坑。
-
-### 4.4 数据质量与时间对齐（必须写清楚）
-**(1) 时间索引补齐**
-- Hourly：补齐连续小时索引（按市场时区定义的“小时边界”或 UTC 再转换）
-- Daily：补齐连续日期（注意加密是 24/7，美股有交易日历）
-
-**(2) 缺失值处理**
-- 优先：重新拉取缺失区间数据
-- 若仍缺失：
-  - OHLC：不建议插值伪造；可标记 `missing_flag=1` 并在训练时过滤或作为特征
-  - 技术指标特征：滚动窗口前期自然 NaN → 丢弃前 N 行
-
-**(3) 极端值/跳点**
-- 不修改原始价格（避免污染）
-- 对“特征”可做稳健处理：
-  - winsorize（如 1%–99% 裁剪）
-  - 或对 returns 做 z-score 异常标记 `outlier_flag`
-
-**(4) 版本与日志**
-- 每次更新生成 `data_quality_report`：
-  - 最新时间戳、缺失比例、重复比例、异常比例
+è¾“å‡ºï¼ˆMVPï¼‰ï¼š
+- æ¦‚çŽ‡ `P(W0..W3)`
+- Top-1 çª—å£ï¼ˆæ¦‚çŽ‡æœ€å¤§è€…ï¼‰
 
 ---
 
-## 5. 特征工程（Feature Engineering）
+### ä»»åŠ¡ 3ï¼šå¹…åº¦/åŒºé—´é¢„æµ‹ï¼ˆMagnitude / Interval Predictionï¼Œåˆ†ä½æ•°å›žå½’ï¼‰
+ç›¸æ¯”å•ç‚¹é¢„æµ‹ï¼Œæœ¬é¡¹ç›®è¾“å‡º**åŒºé—´**æ›´è´´è¿‘çœŸå®žä½¿ç”¨ã€‚
 
-### 5.1 特征设计原则（答辩可讲）
-- 用“过去信息”预测“未来”（无泄露）
-- 同一套特征结构用 config 控制窗口（hourly/daily 共享框架）
-- 兼顾可解释性（树模型特征重要性）与预测性能
+#### 3.1 MVPï¼šæ”¶ç›ŠçŽ‡åˆ†ä½æ•°åŒºé—´
+ç›®æ ‡ï¼š
+- `y_ret(t,h) = r(t,h)`
 
-### 5.2 共用特征类别（两边都做）
-#### A. Return & Momentum
-- log return
-- lag returns：
-  - Hourly：`1,2,4,12,24`（可加 48/72）
-  - Daily：`1,3,7,14`
-- rolling mean return：
-  - Hourly：`24,72,168`
-  - Daily：`7,30,90`
+é¢„æµ‹ï¼š
+- `q10 / q50 / q90`
 
-#### B. Trend
-- EMA（你给的固定组合也可以）：
-  - Hourly：`8/20/55/144/233`
-  - Daily：`8/20/55/144/233`
-- MACD（快慢线 + histogram）
-- （可选）MA 5/10/20/50/200（更传统）
+è®­ç»ƒï¼š
+- åˆ†ä½æ•°å›žå½’ï¼ˆLightGBM quantile objectiveï¼‰
+- ä½¿ç”¨ **Pinball Lossï¼ˆåˆ†ä½æ•°æŸå¤±ï¼‰**ï¼š
+  - `L_q(y, Å·) = max( q*(y-Å·), (q-1)*(y-Å·) )`
 
-#### C. Volatility
-- rolling std of returns（同样分 hourly/daily 窗口）
+åŒºé—´è¯„ä¼°ï¼ˆå¿…é¡»æŠ¥å‘Šï¼‰ï¼š
+- **Coverage**ï¼šçœŸå®žå€¼è½åœ¨ `[q10, q90]` çš„æ¯”ä¾‹ï¼ˆç›®æ ‡çº¦ 80%ï¼‰
+- **Width**ï¼š`mean(q90 - q10)`ï¼ˆè¶Šçª„è¶Šå¥½ï¼Œä½†éœ€å…¼é¡¾ coverageï¼‰
+
+#### 3.2 å¯é€‰å¢žå¼ºï¼ˆæ›´è´´è¿‘â€œç›®æ ‡ä»·â€ï¼‰
+é¢„æµ‹æœªæ¥çª—å£å†… High/Low ç›¸å¯¹å½“å‰ Close çš„å˜åŒ–ï¼š
+- `y_high(t,h) = (max High(next h) - Close[t]) / Close[t]`
+- `y_low(t,h)  = (min Low(next h)  - Close[t]) / Close[t]`
+
+---
+
+## 5ï¼‰æ•°æ®æ–¹æ¡ˆï¼ˆCrypto + Aè‚¡ + ç¾Žè‚¡ï¼‰
+### 5.1 æ•°æ®ç²’åº¦
+- å°æ—¶çº§åˆ†æ”¯ï¼š1H OHLCV
+- æ—¥çº¿çº§åˆ†æ”¯ï¼š1D OHLCV
+
+### 5.2 æ•°æ®æºï¼ˆä¼˜å…ˆçº§ï¼‰
+- **åŠ å¯†ï¼ˆBTC/ETH/SOLï¼‰**ï¼šBinance/Bybit APIï¼ˆæˆ– ccxtï¼‰ï¼Œå¤‡é€‰ï¼šCoinGecko
+- **ç¾Žè‚¡**ï¼šYahoo Financeï¼ˆæ—¥çº¿ç¨³å®šï¼‰ï¼Œå¯é€‰ï¼šPolygon/Alpaca
+- **ä¸­å›½ A è‚¡**ï¼šAkShare / TuShare
+
+### 5.3 æ—¶åŒº & äº¤æ˜“æ—¥åŽ†è§„åˆ™ï¼ˆéžå¸¸é‡è¦ï¼‰
+#### æ—¶åŒºè§„åˆ™ï¼ˆå±•ç¤º/å¸‚åœºæƒ¯ä¾‹ï¼‰
+- **åŠ å¯†ï¼ˆCryptoï¼‰**ï¼š`Asia/Shanghai`ï¼ˆåŒ—äº¬æ—¶é—´ï¼‰
+- **ä¸­å›½ A è‚¡**ï¼š`Asia/Shanghai`ï¼ˆåŒ—äº¬æ—¶é—´ï¼‰
+- **ç¾Žè‚¡**ï¼š`America/New_York`ï¼ˆç¾Žä¸œæ—¶é—´ï¼‰
+
+#### å­˜å‚¨ vs å±•ç¤ºï¼ˆå·¥ç¨‹å®žè·µï¼‰
+- å­˜å‚¨ç»Ÿä¸€ä½¿ç”¨ï¼š`timestamp_utc`ï¼ˆé¿å…å¤ä»¤æ—¶/è·¨æ—¶åŒº bugï¼‰
+- UI å±•ç¤ºç”Ÿæˆï¼š`timestamp_market`
+  - Crypto + Aè‚¡ â†’ åŒ—äº¬æ—¶é—´
+  - ç¾Žè‚¡ â†’ ç¾Žä¸œæ—¶é—´
+- Dashboard å¿…é¡»æ˜Žç¡®æ ‡æ³¨æ—¶åŒºã€‚
+
+#### äº¤æ˜“æ—¥åŽ†å¯¹é½ï¼ˆå…³é”®å·®å¼‚ï¼‰
+- **åŠ å¯†**ï¼š24/7 è¿žç»­ï¼›å°æ—¶çº§åº”è¡¥é½è¿žç»­å°æ—¶ç´¢å¼•
+- **Aè‚¡**ï¼šäº¤æ˜“æ—¥åŽ† + åˆä¼‘ï¼ˆ09:30â€“11:30ï¼Œ13:00â€“15:00ï¼ŒåŒ—äº¬æ—¶é—´ï¼‰
+  - å°æ—¶çº§ï¼šåªä¿ç•™äº¤æ˜“æ—¶æ®µ barsï¼ˆé¿å…â€œä¼ªé€ åˆä¼‘Kçº¿â€ï¼‰
+  - æ—¥çº¿çº§ï¼šä»…äº¤æ˜“æ—¥ï¼ˆä¸è¡¥å‘¨æœ«/èŠ‚å‡æ—¥ï¼‰
+- **ç¾Žè‚¡**ï¼šäº¤æ˜“æ‰€æ—¥åŽ† + å¤ä»¤æ—¶ï¼ˆDSTï¼‰
+  - æ—¥çº¿ï¼šä»…äº¤æ˜“æ—¥
+  - å­˜ UTCã€å±•ç¤º Easternï¼Œé¿å… DST è¾¹ç•Œé”™è¯¯
+  - ä½¿ç”¨å¯é äº¤æ˜“æ‰€æ—¥åŽ†åº“è¿›è¡Œå¯¹é½
+
+### 5.4 æ•°æ®è´¨é‡ç­–ç•¥ï¼ˆData qualityï¼‰
+- è¡¥é½ç¼ºå¤±æ—¶é—´æˆ³ï¼›ä¼˜å…ˆé‡æ–°æ‹‰å–ç¼ºå¤±åŒºé—´
+- é¿å…æ’å€¼ä¼ªé€  OHLCï¼›ç”¨ `missing_flag` æˆ–ä¸¢å¼ƒå—å½±å“æ ·æœ¬
+- ä¸ä¿®æ”¹ raw pricesï¼›å¦‚éœ€ç¨³å¥å¤„ç†ä»…å¯¹â€œç‰¹å¾â€åš winsorize
+- æ¯æ¬¡æ›´æ–°ç”Ÿæˆ `data_quality_report`ï¼š
+  - latest timestampã€missing%ã€duplicates%ã€anomaly flags
+
+---
+
+## 6ï¼‰ç‰¹å¾å·¥ç¨‹ï¼ˆFeature Engineeringï¼‰
+### 6.1 åŽŸåˆ™
+- åªç”¨ `t` æ—¶åˆ»å¯è§ä¿¡æ¯ï¼ˆæ— æ³„éœ²ï¼‰
+- å…±äº«ç‰¹å¾æ¡†æž¶ï¼Œé  config æŽ§åˆ¶çª—å£ï¼ˆhourly/daily ä¸åŒï¼‰
+- MVP ä¼˜å…ˆå¯è§£é‡Šæ€§ï¼ˆæ ‘æ¨¡åž‹ï¼‰
+
+### 6.2 ç‰¹å¾ç»„
+#### Returns & Momentum
+- log returns
+- lag returns
+  - Hourlyï¼š1/2/4/12/24
+  - Dailyï¼š1/3/7/14
+- rolling mean returns
+  - Hourlyï¼š24/72/168
+  - Dailyï¼š7/30/90
+
+#### Trend
+- EMAï¼š8/20/55/144/233
+- MACDï¼ˆline/signal/histogramï¼‰
+
+#### Volatility
+- rolling std of returns
 - ATR
 - Bollinger Band width
 
-#### D. Volume
+#### Volume
 - volume change rate
 - volume MA
-- OBV（可选）
+- ï¼ˆå¯é€‰ï¼‰OBV
 
-#### E. Time Features
-- Hourly：hour_of_day、day_of_week（非常有用）
-- Daily：day_of_week、month（可选）
+#### Time features
+- Hourlyï¼šhour_of_day, day_of_week
+- Dailyï¼šday_of_week, monthï¼ˆå¯é€‰ï¼‰
 
-### 5.3 防止数据泄露（必须写明）
-- 所有 rolling/指标只使用 `t` 及之前的数据
-- 标准化/归一化：
-  - 每个 walk-forward 训练窗口 **单独 fit scaler**
-  - 测试窗口只做 transform
-- 时间序列 split 保证训练集时间 < 测试集时间
-
----
-
-## 6. 模型清单分层（Baseline / MVP / Advanced）
-> 这是你补充点里最关键的部分：让项目“像研究也像工程”。
-
-### 6.1 Baseline（必须实现）
-**方向（分类）**
-- Naive：方向=上一根方向
-- **LogisticRegression（baseline 强推荐）**
-  - `class_weight="balanced"`（处理不平衡）
-
-**启动窗口（多分类）**
-- 最频繁窗口 baseline（总预测最常见的 Wi）
-- 多项 Logistic Regression（softmax）作为 baseline
-
-**幅度（回归/区间）**
-- Naive：收益率预测=0
-- Linear Regression 作为传统 baseline（可选）
-
-**波动/高波动窗口（可选 baseline）**
-- rolling volatility + 阈值判别（非常轻量）
-
-### 6.2 MVP（主力模型）
-**主力：LightGBM / XGBoost**
-- 方向预测：LGBMClassifier
-- 启动窗口：LGBMClassifier（多分类）
-- 幅度区间：**Quantile LightGBM（主力）**
-  - 分别训练 q=0.1/0.5/0.9（pinball loss）
-
-> 选择 LightGBM 作为 MVP 主力：快、稳、可解释、实现成本低，最适合 CS 487 落地。
-
-### 6.3 Advanced（高级模型，二选一：我全权选择 TFT）
-**Advanced：Temporal Fusion Transformer（TFT）**
-- 理由：
-  - 擅长 multi-horizon forecasting（天然匹配“多个 horizon 同时预测”）
-  - 可解释性更好（变量选择/attention）
-- 用法：
-  - 框架固定：`PyTorch Forecasting + PyTorch Lightning`（不使用 TensorFlow 分支）
-  - Daily 分支优先（噪声较小）
-  - 输出：multi-horizon 的方向概率/收益率（或收益率区间）
-
-> Advanced 只做一个（TFT），避免范围爆炸。若时间不足，可用 TCN 作为 fallback，但不写进主计划。
+### 6.3 é˜²æ­¢æ•°æ®æ³„éœ²ï¼ˆLeakage preventionï¼‰
+- æŒ‡æ ‡/æ»šåŠ¨ç»Ÿè®¡ä»…ä½¿ç”¨ `â‰¤ t` çš„æ•°æ®è®¡ç®—
+- Scalingï¼š
+  - åªåœ¨è®­ç»ƒ fold ä¸Š fit
+  - æµ‹è¯• fold åª transform
+- ä»…å…è®¸æ—¶é—´åºåˆ—åˆ‡åˆ†ï¼ˆç¦æ­¢éšæœºæ‰“ä¹±ï¼‰
 
 ---
 
-## 7. 多任务建模策略（MTL vs 分开训练）
-为避免实现阶段反复改动，方案写死：
+## 7ï¼‰æ¨¡åž‹æ ˆï¼ˆBaseline / MVP / Advancedï¼‰
+### 7.1 Baselineï¼ˆå¿…é¡»å®žçŽ°ï¼‰
+**æ–¹å‘**
+- Naiveï¼šé¢„æµ‹ä¸Žä¸Šä¸€æ ¹ bar åŒæ–¹å‘
+- Logistic Regressionï¼ˆ`class_weight="balanced"`ï¼‰
 
-### 7.1 MVP：分任务训练（Recommended）
-- 方向模型：单独训练（每个 horizon 可独立或共享一个模型输出多个 horizon）
-- 启动窗口模型：单独训练
-- 幅度区间模型：分位数模型（q10/q50/q90）单独训练
+**å¯åŠ¨çª—å£**
+- Most-frequent-class baseline
+- Multinomial Logistic Regressionï¼ˆsoftmaxï¼‰
 
-**优点**
-- Debug 容易、指标清晰、时间可控、可交付性强
+**å¹…åº¦**
+- Naiveï¼šreturn = 0
+- ï¼ˆå¯é€‰ï¼‰Linear Regression
 
-### 7.2 Advanced：可选多任务学习（仅在 TFT 阶段探索）
-- 共享 encoder/backbone
-- 3 个 head：direction / start_window / quantile_return
-- 只做对比实验，不作为 MVP 必需
+### 7.2 MVPï¼ˆä¸»åŠ›æ¨¡åž‹ï¼‰
+**LightGBM / XGBoost**
+- æ–¹å‘ï¼šLGBMClassifier
+- å¯åŠ¨çª—å£ï¼šLGBMClassifierï¼ˆå¤šåˆ†ç±»ï¼‰
+- å¹…åº¦åŒºé—´ï¼šQuantile LightGBMï¼ˆq10/q50/q90 åˆ†åˆ«è®­ç»ƒï¼‰
 
----
+**ä¸ºä½• MVP ç”¨ LightGBM**ï¼šè®­ç»ƒå¿«ã€ç¨³å®šã€å¯è§£é‡Šã€å·¥ç¨‹é£Žé™©ä½Žã€‚
 
-## 8. 超参数搜索方案（Optuna + Early Stopping）
-> 你补充点非常对：需要写清楚“怎么调参”和“预算”。
-
-### 8.1 搜索工具与策略
-- **Optuna（推荐）**：更高效
-- 若时间紧：Random Search（备用）
-
-### 8.2 调参预算（建议写死）
-- Daily：`30–50 trials`
-- Hourly：`20–30 trials`
-- 每个 trial 使用“简化版验证”：
-  - 用一个固定 walk-forward fold（或 TimeSeriesSplit 的小子集）快速打分
-- 最优参数再跑完整 walk-forward 输出最终成绩
-
-### 8.3 典型搜索空间（LightGBM）
-- `num_leaves: [16, 256]`
-- `max_depth: [-1, 16]`
-- `learning_rate: [1e-3, 0.2] (log)`
-- `min_data_in_leaf: [20, 500]`
-- `feature_fraction: [0.5, 1.0]`
-- `bagging_fraction: [0.5, 1.0]`
-- `lambda_l1: [0, 5]`
-- `lambda_l2: [0, 5]`
-
-### 8.4 早停策略
-- `early_stopping_rounds = 100`
-- `num_boost_round` 给足上限（如 5000），由 early stopping 自动截断
+### 7.3 Advancedï¼ˆå¯é€‰ï¼‰
+**Temporal Fusion Transformerï¼ˆTFTï¼‰**
+- æ“…é•¿ multi-horizon forecasting
+- å¯è§£é‡Šæ€§æ›´å¼ºï¼ˆvariable selection / attentionï¼‰
+- ä¼˜å…ˆä»Ž Daily åˆ†æ”¯å¼€å§‹ï¼ˆå™ªå£°æ›´å°ï¼‰
+- æŽ¨èæ¡†æž¶ï¼šPyTorch Forecasting + PyTorch Lightning
 
 ---
 
-## 9. 不平衡处理与概率校准（Imbalance + Calibration）
-### 9.1 类别不平衡
-方向分类/启动窗口可能存在不平衡：
-- LogisticRegression：`class_weight="balanced"`
-- LightGBM：
-  - 二分类：`scale_pos_weight`
-  - 多分类：自定义 class weights（或 sample weights）
+## 8ï¼‰å¤šä»»åŠ¡ç­–ç•¥ï¼ˆMulti-Task Strategyï¼‰
+**MVP å†³ç­–ï¼šåˆ†ä»»åŠ¡è®­ç»ƒï¼ˆå¼ºåˆ¶å†™æ­»ï¼‰**
+- å•ç‹¬è®­ç»ƒ direction æ¨¡åž‹
+- å•ç‹¬è®­ç»ƒ start-window æ¨¡åž‹
+- åˆ†ä½æ•° q10/q50/q90 åˆ†åˆ«è®­ç»ƒ
 
-> 时间序列下不建议随便 SMOTE（可能破坏时间结构），优先用权重法。
+ä¼˜ç‚¹ï¼šè°ƒè¯•ç®€å•ã€æŒ‡æ ‡æ¸…æ™°ã€äº¤ä»˜å¯æŽ§ã€‚
 
-### 9.2 概率校准（推荐对最终模型做）
-- Platt scaling（sigmoid）或 Isotonic regression
-- 输出校准后概率，用于更可靠的阈值决策
-
-**报告指标**
-- **Brier Score**（概率质量）
-- （可选）reliability diagram / ECE
+**Advancedï¼ˆå¯é€‰ï¼‰ï¼šTFT å¤šä»»åŠ¡å¯¹æ¯”**
+- å…±äº« encoder + åˆ† headï¼ˆdirection/start/quantilesï¼‰ï¼Œä»…ä½œä¸ºå¯¹æ¯”å®žéªŒã€‚
 
 ---
 
-## 10. 区间预测细节（Quantile Training + Metrics）
-### 10.1 训练方式（明确写 pinball loss）
-- 训练三个模型：
-  - `Model_q10, Model_q50, Model_q90`
-- Loss：Pinball Loss（quantile regression objective）
+## 9ï¼‰è¶…å‚æ•°è°ƒå‚ï¼ˆOptuna + Early Stoppingï¼‰
+- å·¥å…·ï¼šOptunaï¼ˆå¤‡é€‰ï¼šrandom searchï¼‰
+- é¢„ç®—ï¼ˆå›ºå®šï¼‰ï¼š
+  - Dailyï¼š30â€“50 trials
+  - Hourlyï¼š20â€“30 trials
+- å…ˆåœ¨å°è§„æ¨¡ time-split å­é›†å¿«é€Ÿæ‰“åˆ†ï¼Œå†ç”¨æœ€ä½³å‚æ•°è·‘å®Œæ•´ walk-forward
 
-### 10.2 保证分位数不交叉（实践细节）
-若出现 `q10 > q50` 或 `q50 > q90`：
-- 简单策略：对预测分位数排序 `sort(q10,q50,q90)`
-- 或做 post-processing 单调修正（可选）
+LightGBM æœç´¢ç©ºé—´ç¤ºä¾‹ï¼š
+- num_leavesï¼š16â€“256
+- max_depthï¼š-1â€“16
+- learning_rateï¼š1e-3â€“0.2ï¼ˆlog-scaleï¼‰
+- min_data_in_leafï¼š20â€“500
+- feature_fractionï¼š0.5â€“1.0
+- bagging_fractionï¼š0.5â€“1.0
+- lambda_l1 / lambda_l2ï¼š0â€“5
 
-### 10.3 区间评估（必须）
-- Coverage：`P( y ∈ [q10,q90] )`（目标接近 0.8）
-- Interval Width：`mean(q90 - q10)`
-- 结合评价：Coverage 不够 → 区间偏窄；Width 太大 → 区间太保守
+Early stoppingï¼š
+- early_stopping_rounds = 100
+- num_boost_round â‰¤ 5000
 
 ---
 
-## 11. 训练与验证（Walk-forward 评估协议）
-### 11.1 Walk-forward 设置
-- expanding window 或 rolling window
-- 每个 fold：
-  - 用过去训练
-  - 训练集与测试集之间设置 `purge/gap`，防止标签窗口重叠导致泄露
-  - `gap = max_horizon`（Hourly=`4 bars`，Daily=`7 bars`）
-  - 若训练样本的标签窗口与测试区间重叠，则从训练样本中剔除
-  - 用未来测试
-  - 记录 metrics
+## 10ï¼‰ç±»åˆ«ä¸å¹³è¡¡ + æ¦‚çŽ‡æ ¡å‡†ï¼ˆImbalance + Calibrationï¼‰
+**ä¸å¹³è¡¡**
+- Logisticï¼š`class_weight="balanced"`
+- LightGBMï¼š
+  - binaryï¼š`scale_pos_weight`
+  - multiclassï¼šsample weights / class weights
 
-**输出**
-- `metrics.csv`（每个 fold、每个 horizon、每个任务）
-- 汇总均值/方差（稳定性）
+**æ ¡å‡†ï¼ˆå¯¹æœ€ç»ˆæ¨¡åž‹åšï¼‰**
+- Platt scalingï¼ˆsigmoidï¼‰æˆ– Isotonic
+- æŠ¥å‘Šï¼šBrier score
+- ï¼ˆå¯é€‰ï¼‰reliability diagram / ECE
 
-### 11.2 指标体系（最终报告必须有）
-**方向（分类）**
+---
+
+## 11ï¼‰åŒºé—´é¢„æµ‹ç»†èŠ‚ï¼ˆInterval Prediction Detailsï¼‰
+- q10/q50/q90 åˆ†åˆ«è®­ç»ƒ
+- è‹¥å‡ºçŽ°åˆ†ä½æ•°äº¤å‰ï¼ˆq10 > q50 ç­‰ï¼‰ï¼š
+  - ç®€å•åŽå¤„ç†ï¼šå¯¹ (q10,q50,q90) æŽ’åº
+
+æŠ¥å‘Šï¼š
+- Coverageï¼ˆ[q10,q90]ï¼‰
+- Widthï¼ˆmean(q90-q10)ï¼‰
+
+---
+
+## 12ï¼‰è¯„ä¼°åè®®ï¼ˆWalk-Forward Evaluationï¼‰
+### 12.1 Walk-forward è®¾ç½®
+- expanding æˆ– rolling window
+- åŠ å…¥ gap/purge é˜²æ­¢ horizon é‡å æ³„éœ²ï¼š
+  - gap = max horizonï¼ˆHourly: 4 barsï¼›Daily: 7 barsï¼‰
+- ä¿å­˜é€ fold æŒ‡æ ‡åˆ° `metrics.csv`
+
+### 12.2 æŠ¥å‘ŠæŒ‡æ ‡ï¼ˆå¿…é¡»ï¼‰
+**æ–¹å‘**
 - Accuracy, Precision, Recall, F1, ROC-AUC
 
-**启动窗口（多分类）**
+**å¯åŠ¨çª—å£**
 - Top-1 accuracy
 - Top-2 accuracy
-- Macro-F1（可选）
+- ï¼ˆå¯é€‰ï¼‰Macro-F1
 
-**幅度（回归）**
-- MAE / RMSE / Pinball Loss
-- sign accuracy（方向命中）
+**å¹…åº¦**
+- MAE / RMSE / Pinball loss
+- ï¼ˆå¯é€‰ï¼‰sign accuracy
 
-**区间（quantile）**
-- Coverage（如 q10–q90）
-- Interval Width
-
----
-
-## 12. 交易可用性评估（轻量回测 / Paper Trading）
-> 即使你不做交易执行，这一部分会非常加分。
-
-### 12.1 信号生成（最小可行）
-- 当 `P(up) > 0.55` → 做多
-- 当 `P(up) < 0.45` → 做空
-- 否则空仓
-- 可对不同 horizon 分别做（hourly/daily）
-
-### 12.2 成本与延迟建模
-- 手续费：固定 bps（例如 5–20 bps）
-- 滑点：固定 bps（例如 5–20 bps）
-- 延迟：信号在 `t` 产生，**在 t+1 执行**（避免 look-ahead）
-
-### 12.3 输出指标
-- 总收益率、年化收益率（daily 更适合）
-- 最大回撤、Sharpe
-- 胜率、盈亏比
-- 与 baseline（buy&hold、均线策略）对比
+**åŒºé—´**
+- Coverage
+- Width
 
 ---
 
-## 13. 系统工程落地（Pipeline / API / 调度 / 版本）
-### 13.1 项目结构（建议）
-CryptoForecast/
-├── data/
-│ ├── raw/
-│ ├── processed/
-│ └── models/
-├── src/
-│ ├── ingestion/ # 拉数据 + 更新
-│ ├── preprocessing/ # 清洗、对齐、质量检查
-│ ├── features/ # 特征工程
-│ ├── labels/ # label 生成
-│ ├── models/ # 训练/预测/校准/分位数
-│ ├── evaluation/ # walk-forward + backtest
-│ └── utils/ # config、logging、helpers
-├── dashboard/ # streamlit
-├── configs/ # config.yaml
-└── README.md
+## 13ï¼‰åŠ åˆ†ï¼šè½»é‡å›žæµ‹ï¼ˆä¸åšå®žç›˜ï¼‰
+æœ€å°ä¿¡å·è§„åˆ™ï¼š
+- P(up) > 0.55 â†’ Long
+- P(up) < 0.45 â†’ Short
+- å¦åˆ™ Flat
+
+çœŸå®žæ„Ÿï¼š
+- æ‰‹ç»­è´¹ bpsã€æ»‘ç‚¹ bps
+- æ‰§è¡Œå»¶è¿Ÿï¼šä¿¡å·åœ¨ t äº§ç”Ÿï¼Œt+1 æ‰§è¡Œ
+
+æŠ¥å‘Šï¼š
+- total return, max drawdown, Sharpe
+- win rate, profit factor
+- å¯¹æ¯” baselineï¼ˆbuy&holdã€å‡çº¿ç­–ç•¥ï¼‰
+
+---
+
+## 14ï¼‰å·¥ç¨‹å®žçŽ°ï¼ˆEngineering Implementationï¼‰
+### 14.1 ä»“åº“ç»“æž„
+Forecast/
+â”œâ”€â”€ data/
+â”‚ â”œâ”€â”€ raw/
+â”‚ â”œâ”€â”€ processed/
+â”‚ â””â”€â”€ models/
+â”œâ”€â”€ src/
+â”‚ â”œâ”€â”€ ingestion/
+â”‚ â”œâ”€â”€ preprocessing/
+â”‚ â”œâ”€â”€ features/
+â”‚ â”œâ”€â”€ labels/
+â”‚ â”œâ”€â”€ models/
+â”‚ â”œâ”€â”€ evaluation/
+â”‚ â””â”€â”€ utils/
+â”œâ”€â”€ dashboard/Streamlit
+â”œâ”€â”€ configs/config.yaml
+â””â”€â”€ README.md
 
 
-### 13.2 Pipeline（建议的可执行命令）
+### 14.2 Pipeline å‘½ä»¤
 - `python -m src.ingestion.update_data --config configs/config.yaml`
 - `python -m src.features.build_features --config ...`
 - `python -m src.labels.build_labels --config ...`
 - `python -m src.models.train --config ...`
 - `python -m src.models.predict --config ...`
+- `python -m src.markets.snapshot --config ...`
 - `python -m src.evaluation.walk_forward --config ...`
 - `streamlit run dashboard/app.py`
 
-### 13.3 调度（MVP）
-- 使用 cron 或 APScheduler（轻量、够用）
-- 每天更新数据 & 生成最新预测
+### 14.3 è°ƒåº¦ï¼ˆMVPï¼‰
+- cron æˆ– APScheduler
+- æ¯æ—¥æ›´æ–° + ç”Ÿæˆæœ€æ–°é¢„æµ‹
 
-### 13.4 模型版本管理（MVP）
-- 目录按时间戳：
+### 14.4 ç‰ˆæœ¬ç®¡ç†ï¼ˆModel/version managementï¼‰
+- æŒ‰æ—¶é—´æˆ³ä¿å­˜ï¼š
   - `data/models/2026-02-05_hourly/`
   - `data/models/2026-02-05_daily/`
-- 同时保存：
-  - `model.pkl`
-  - `config_snapshot.yaml`
-  - `metrics.json`
-
-> MLflow 作为加分项，非必需。
-
----
-
-## 14. Dashboard 设计（单页两栏 · 可演示）
-### 左栏：Hourly（1h/2h/4h）
-- Up/Down 概率卡片
-- Start window（Top-1 或每窗概率）
-- Return interval（q10–q90）
-- 图：价格曲线 + 预测区间带
-
-### 右栏：Daily（1d/3d/7d）
-- 同样三类输出
-- 图：日线价格 + 预测区间带
-
-### 底部：模型表现与对比
-- Baseline vs MVP 指标表（hourly/daily 分开）
-- 区间 coverage/width 报告
-- （可选）特征重要性/SHAP
+- ä¿å­˜äº§ç‰©ï¼š
+  - model.pkl
+  - config_snapshot.yaml
+  - metrics.json
+  - git commit hash
 
 ---
 
-## 15. 里程碑与验收标准（W1–W8 可验收）
-> 每周必须有“可验收产物”，保证项目按时收敛。
+## 15ï¼‰Dashboardï¼ˆæ¼”ç¤ºç»“æž„ï¼‰
+**é¡¶éƒ¨ï¼šå¤šå¸‚åœºå¿«ç…§ï¼ˆCrypto / Aè‚¡ / ç¾Žè‚¡ï¼‰**
+- æ¯ä¸ªå¸‚åœºè‡³å°‘å±•ç¤ºä»¥ä¸‹å››é¡¹ï¼š
+  - å½“å‰ä»·æ ¼ï¼ˆCurrent Priceï¼‰
+  - é¢„æµ‹ä»·æ ¼ï¼ˆPredicted Priceï¼‰
+  - é¢„æµ‹å¹…åº¦ï¼ˆPredicted Changeï¼‰
+  - é¢„æœŸæ—¥æœŸï¼ˆExpected Dateï¼‰
+- æ”¯æŒå¯é€‰è‚¡ç¥¨æ± ä¸Žæ ‡çš„ï¼š
+  - Cryptoï¼š`BTC / ETH / SOL` + `å¸‚å€¼å‰100ï¼ˆå‰”é™¤ç¨³å®šå¸ï¼Œå¦‚ USDT/USDCï¼‰`
+  - Aè‚¡ï¼š`ä¸Šè¯æŒ‡æ•°æˆåˆ†è‚¡`ã€`æ²ªæ·±300æˆåˆ†è‚¡`
+  - ç¾Žè‚¡ï¼š`é“ç¼æ–¯30`ã€`çº³æ–¯è¾¾å…‹100`ã€`æ ‡æ™®500`
+- ä»·æ ¼è§„åˆ™ï¼š
+  - **åŠ å¯†å¸‚åœºå½“å‰ä»·æ ¼å¿…é¡»ä½¿ç”¨å®žæ—¶ tickerï¼ˆéžæ”¶ç›˜ä»·ï¼‰**
+  - Aè‚¡/ç¾Žè‚¡ä¼˜å…ˆä½¿ç”¨è¡Œæƒ… API æœ€æ–°ä»·ï¼›è‹¥å®žæ—¶ä¸å¯ç”¨ï¼Œæ˜Žç¡®æ ‡æ³¨ä¸ºæœ€æ–°å¯å¾—ä»·
 
-### W1：数据与时区对齐
-- 完成 1H/1D 数据拉取与存储
-- 生成 `data_quality_report`
-- **验收**：时间戳对齐正确（BTC=北京时间展示；存储保留 UTC）
+**å·¦åˆ—ï¼šHourlyï¼ˆ1h/2h/4hï¼‰**
+- P(up)/P(down) å¡ç‰‡
+- å¯åŠ¨çª—å£æ¦‚çŽ‡
+- q10â€“q90 åŒºé—´
+- å›¾ï¼šä»·æ ¼ + åŒºé—´å¸¦
 
-### W2：特征工程 v1 + 标签 v1
-- features_hourly / features_daily 生成
-- labels（direction/start/return）生成
-- **验收**：无泄露（只用过去），前 N 行 NaN 处理明确
+**å³åˆ—ï¼šDailyï¼ˆ1d/3d/7dï¼‰**
+- åŒæ ·è¾“å‡º
 
-### W3：Baseline 全部跑通 + walk-forward v1
-- Naive + LogisticRegression（方向/启动）
-- 输出 `metrics.csv`
-- **验收**：walk-forward 流程可复现（命令一键跑）
-
-### W4：MVP 分类模型（LightGBM）
-- 方向分类 + 启动窗口分类
-- 与 baseline 对比（AUC/F1/Top-1/Top-2）
-- **验收**：指标优于 baseline（至少在多个 fold 上稳定不差）
-
-### W5：Quantile LightGBM（区间预测）
-- q10/q50/q90 完成
-- coverage/width 指标输出
-- **验收**：coverage 接近目标区间（如 0.75–0.85）且区间宽度合理
-
-### W6：Dashboard v1
-- 展示 hourly/daily 预测 + 指标 + baseline 对比
-- **验收**：演示流程顺畅，能解释每个输出含义
-
-### W7：轻量回测 + case studies
-- 引入成本与延迟的 paper backtest
-- 2–3 段行情案例分析（预测对/错原因）
-- **验收**：策略结果与 baseline 对照完整（不追求赚钱，追求严谨）
-
-### W8：Final polish
-- 文档、可复现说明、演示脚本、最终结果表
-- **验收**：从零开始按 README 一键复现核心结果
+**åº•éƒ¨ï¼šæ€§èƒ½**
+- baseline vs MVP æŒ‡æ ‡è¡¨
+- åŒºé—´ coverage/width
+- ï¼ˆå¯é€‰ï¼‰feature importance / SHAP
 
 ---
 
-## 16. 风险与应对（Risk Mitigation）
-- **小时级噪声大**：先做日线稳健 MVP，再扩展小时级；小时级优先树模型
-- **标签阈值不合理**：使用历史分位数自动设定，并做阈值敏感性测试
-- **数据泄露风险**：强制 walk-forward + scaler 每 fold 独立 fit
-- **范围过大**：Advanced（TFT）严格作为加分项，不影响 MVP 交付
+## 16ï¼‰å‘¨è®¡åˆ’ï¼ˆW1â€“W8ï¼‰
+- **W1**ï¼šæ•°æ®æŽ¥å…¥ + æ—¶åŒºå¯¹é½ + è´¨é‡æŠ¥å‘Š
+- **W2**ï¼šFeatures v1 + Labels v1ï¼ˆæ— æ³„éœ²ï¼‰
+- **W3**ï¼šBaselines + walk-forward v1ï¼ˆç”Ÿæˆå¯å¤çŽ° metrics.csvï¼‰
+- **W4**ï¼šMVP åˆ†ç±»ï¼ˆLightGBMï¼‰+ baseline å¯¹æ¯”
+- **W5**ï¼šQuantile LightGBMï¼ˆq10/q50/q90ï¼‰+ coverage/width
+- **W6**ï¼šDashboard v1ï¼ˆå¯æ¼”ç¤ºï¼‰
+- **W7**ï¼šå›žæµ‹ + 2â€“3 æ®µ case studiesï¼ˆè§£é‡Šå¯¹/é”™åŽŸå› ï¼‰
+- **W8**ï¼šæœ€ç»ˆå®Œå–„ + README ä¸€é”®å¤çŽ°
 
 ---
 
-## 17. 技术栈总结（Tools & Tech）
-- Python（核心）
-- pandas, numpy
+## 17ï¼‰é£Žé™©ä¸Žåº”å¯¹ï¼ˆRisks & Mitigationï¼‰
+- å°æ—¶çº§å™ªå£°å¤§ï¼šä¼˜å…ˆå®Œæˆ Daily MVPï¼Œå†æ‰©å±• Hourly
+- é˜ˆå€¼æ•æ„Ÿï¼šåˆ†ä½æ•°é˜ˆå€¼ + æ•æ„Ÿæ€§æ£€æŸ¥
+- æ³„éœ²é£Žé™©ï¼šä¸¥æ ¼ walk-forward + gap/purge + æ¯ fold scaler ç‹¬ç«‹ fit
+- èŒƒå›´è†¨èƒ€ï¼šTFT å¯é€‰ï¼›MVP ä¿è¯å¯äº¤ä»˜
+
+---
+
+## 18ï¼‰æŠ€æœ¯æ ˆä¸Žå¯å¤çŽ°ï¼ˆTech Stack + Reproducibilityï¼‰
+**æ ¸å¿ƒ**
+- Python, pandas, numpy
 - requests / ccxt
 - ta / pandas_ta
 - scikit-learn
 - lightgbm / xgboost
-- （Advanced 可选）TFT（固定 PyTorch：PyTorch Forecasting + Lightning）
-- streamlit
-- plotly/matplotlib
+- streamlit + plotly/matplotlib
 - git + config.yaml
 - cron / APScheduler
 
-### 17.1 可复现性设置（必须）
-- 固定随机种子：`seed=42`（python / numpy / lightgbm / torch）
-- 依赖版本固定到 `requirements.txt`（避免环境漂移）
-- 训练产物必须保存：`model.pkl`、`config_snapshot.yaml`、`metrics.json`
-- 额外记录：训练时对应的 git commit hash（便于复现实验）
+**é«˜çº§ï¼ˆå¯é€‰ï¼‰**
+- TFTï¼šPyTorch Forecasting + PyTorch Lightning
+
+## 19) Quant Factors (Implemented in MVP)
+- Risk factors: market cap (size), value (earnings/book proxy), growth (fundamental growth or 90d return proxy).
+- Market behavior factors: momentum (20d return), reversal (-5d return), low volatility (-20d return std).
+- For symbols without fundamentals (common in crypto), factors fall back to transparent price-based proxies and source labels are displayed in dashboard.
