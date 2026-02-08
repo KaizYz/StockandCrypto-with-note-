@@ -59,7 +59,7 @@ models:
   train_ratio: 0.8
   quantiles: [0.1, 0.5, 0.9]
   classifier:
-    n_estimators: 600
+    n_estimators: 240
     learning_rate: 0.03
     num_leaves: 63
     max_depth: -1
@@ -68,7 +68,7 @@ models:
     reg_alpha: 0.0
     reg_lambda: 0.0
   regressor:
-    n_estimators: 600
+    n_estimators: 240
     learning_rate: 0.03
     num_leaves: 63
     max_depth: -1
@@ -109,7 +109,7 @@ backtest_multi_market:
     crypto: 8
     cn_equity: 8
     us_equity: 8
-  strategies: ["policy", "buy_hold", "ma_crossover", "naive_prev_bar"]
+  strategies: ["policy", "buy_hold", "ma_crossover", "naive_prev_bar", "lux_machine_supertrend"]
   impact:
     lambda_bps: 1.0
     beta: 0.5
@@ -126,8 +126,34 @@ policy:
   execution:
     fee_bps: 10
     slippage_bps: 10
+    impact_bps: 1.0
     max_position: 1.0
     min_position: 0.01
+    market_cost_profiles:
+      crypto_perp:
+        fee_bps: 6
+        slippage_bps: 4
+        impact_bps: 1.2
+        delay_bars: 1
+        fill_price_mode: "next_open"
+      crypto_spot:
+        fee_bps: 10
+        slippage_bps: 6
+        impact_bps: 1.0
+        delay_bars: 1
+        fill_price_mode: "next_open"
+      cn_equity:
+        fee_bps: 8
+        slippage_bps: 6
+        impact_bps: 0.8
+        delay_bars: 1
+        fill_price_mode: "next_open"
+      us_equity:
+        fee_bps: 2
+        slippage_bps: 4
+        impact_bps: 0.6
+        delay_bars: 1
+        fill_price_mode: "next_open"
   sizing:
     uncertainty_scale: 12.0
     fallback_half_width_pct: 0.01
@@ -252,3 +278,80 @@ forecast_config:
       - "https://api.binance.us"
     binance_perp_endpoints:
       - "https://fapi.binance.com"
+
+data_gate:
+  enabled: true
+  fail_fast: true
+  max_missing_rate: 0.05
+  max_duplicate_ratio: 0.0
+  require_monotonic_timestamp: true
+  allow_future_timestamps: false
+  require_ohlc_validity: true
+  min_history_bars:
+    hourly: 1800
+    daily: 500
+
+training:
+  holdout:
+    enabled: true
+    ratio: 0.10
+    min_rows: 60
+  calibration:
+    ratio: 0.20
+  hpo:
+    enabled: true
+    coarse_trials: 4
+    fine_trials: 2
+    validation_ratio: 0.20
+    max_horizons_per_branch: 1
+    max_train_rows: 6000
+    random_state: 42
+    owner: "youka"
+    space_version: "hpo_v1"
+    param_space:
+      n_estimators: [120, 240, 360]
+      learning_rate: [0.01, 0.03, 0.05, 0.08]
+      num_leaves: [31, 63, 127]
+      subsample: [0.7, 0.8, 1.0]
+      colsample_bytree: [0.7, 0.8, 1.0]
+      reg_alpha: [0.0, 0.1, 0.5]
+      reg_lambda: [0.0, 0.1, 1.0]
+  use_hpo_best_for_training: true
+
+cost_stress:
+  enabled: true
+  fee_bps_grid: [2, 5, 10]
+  slippage_bps_grid: [1, 3, 8]
+  delay_bars_grid: [0, 1, 2]
+  strategy: "policy"
+
+monitoring:
+  drift:
+    metric_alerts:
+      yellow: 0.10
+      orange: 0.25
+      red: 0.40
+    data_alerts:
+      yellow: 0.10
+      orange: 0.20
+      red: 0.35
+  retirement:
+    consecutive_non_positive_limit: 3
+    allow_red_alerts: 0
+
+decision:
+  confidence_min: 60.0
+
+kill_switch:
+  enabled: true
+  env_var: "DISABLE_TRADING"
+  recovery_health_checks_required: 3
+  trial_position_scale: 0.25
+  trial_windows: 1
+  admin_role: "ops_admin"
+  operator_role_env: "TRADING_OPERATOR_ROLE"
+
+reporting:
+  thresholds_file: "configs/go_live_thresholds.yaml"
+  fill_price_mode: "next_open"
+  cost_profile: "dynamic_v1"

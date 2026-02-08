@@ -36,14 +36,21 @@ def classification_metrics(
 def multiclass_metrics(
     y_true: np.ndarray, y_pred: np.ndarray, y_proba: np.ndarray
 ) -> Dict[str, float]:
-    classes = np.unique(y_true)
+    if y_proba.ndim == 2 and y_proba.shape[1] >= 2:
+        classes = np.arange(y_proba.shape[1])
+    else:
+        classes = np.unique(y_true)
+    try:
+        top2 = float(
+            top_k_accuracy_score(y_true, y_proba, k=2, labels=classes)
+            if y_proba.ndim == 2 and y_proba.shape[1] >= 2
+            else accuracy_score(y_true, y_pred)
+        )
+    except Exception:
+        top2 = float(accuracy_score(y_true, y_pred))
     return {
         "top1_accuracy": float(accuracy_score(y_true, y_pred)),
-        "top2_accuracy": float(
-            top_k_accuracy_score(y_true, y_proba, k=2, labels=classes)
-            if y_proba.shape[1] >= 2
-            else accuracy_score(y_true, y_pred)
-        ),
+        "top2_accuracy": top2,
         "macro_f1": float(f1_score(y_true, y_pred, average="macro", zero_division=0)),
     }
 
@@ -80,4 +87,3 @@ def rows_from_metric_dict(
         row["metric"] = key
         row["value"] = val
         yield row
-

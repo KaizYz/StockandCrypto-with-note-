@@ -1,0 +1,32 @@
+{
+  "release_name": "paper_go_live_2026-02-07",
+  "scope": "paper_trading_only",
+  "generated_at_utc": "2026-02-07T21:21:33Z",
+  "markets": [
+    "crypto",
+    "cn_equity",
+    "us_equity"
+  ],
+  "timezones": {
+    "storage": "UTC",
+    "crypto_display": "Asia/Shanghai",
+    "ashares_display": "Asia/Shanghai",
+    "us_display": "America/New_York"
+  },
+  "versions": {
+    "git_commit": "072df35",
+    "config_hash": "1332dfca439eec8ccb5dbcd864dc4dd43a12072d07c7ebc9315052eac6b4deed",
+    "data_hash": "a8ef06459e7a234169b78be153cb8b6717f89efb3a582cf45f9058b8c85f4b3d",
+    "model_version": "baseline_momentum_quantile",
+    "universe_version": "e8853f6c5b55070e"
+  },
+  "assumptions": {
+    "delay_bars": 1,
+    "fill_price_mode": "next_open",
+    "cost_profile": "dynamic_v1",
+    "fee_bps": 10.0,
+    "slippage_bps": 10.0,
+    "impact_bps": 1.0
+  },
+  "config_path": "configs/config.yaml"
+}

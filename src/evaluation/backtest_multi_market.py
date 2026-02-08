@@ -4,6 +4,7 @@ import argparse
 from datetime import datetime, timedelta, timezone
 from io import StringIO
 from pathlib import Path
+from itertools import product
 from typing import Any, Dict, List, Tuple
 
 import numpy as np
@@ -120,6 +121,177 @@ def _atr_from_bars(df: pd.DataFrame, period: int = 14) -> pd.Series:
     return tr.rolling(max(int(period), 1)).mean()
 
 
+def _atr_wilder_from_bars(df: pd.DataFrame, period: int = 14) -> pd.Series:
+    high = pd.to_numeric(df.get("high"), errors="coerce")
+    low = pd.to_numeric(df.get("low"), errors="coerce")
+    close = pd.to_numeric(df.get("close"), errors="coerce")
+    prev_close = close.shift(1)
+    tr = pd.concat(
+        [
+            (high - low).abs(),
+            (high - prev_close).abs(),
+            (low - prev_close).abs(),
+        ],
+        axis=1,
+    ).max(axis=1)
+    p = max(int(period), 1)
+    atr = tr.ewm(alpha=1.0 / p, adjust=False, min_periods=p).mean()
+    return atr
+
+
+def _compute_pine_supertrend(
+    high: pd.Series,
+    low: pd.Series,
+    close: pd.Series,
+    atr: pd.Series,
+    factor: float = 3.0,
+) -> Tuple[pd.Series, pd.Series]:
+    h = pd.to_numeric(high, errors="coerce").to_numpy(dtype=float)
+    l = pd.to_numeric(low, errors="coerce").to_numpy(dtype=float)
+    c = pd.to_numeric(close, errors="coerce").to_numpy(dtype=float)
+    a = pd.to_numeric(atr, errors="coerce").to_numpy(dtype=float)
+    n = len(c)
+
+    final_upper = np.full(n, np.nan, dtype=float)
+    final_lower = np.full(n, np.nan, dtype=float)
+    supertrend = np.full(n, np.nan, dtype=float)
+    direction = np.full(n, np.nan, dtype=float)
+
+    for i in range(n):
+        src = (h[i] + l[i]) / 2.0 if np.isfinite(h[i]) and np.isfinite(l[i]) else np.nan
+        upper_band = src + factor * a[i] if np.isfinite(src) and np.isfinite(a[i]) else np.nan
+        lower_band = src - factor * a[i] if np.isfinite(src) and np.isfinite(a[i]) else np.nan
+
+        prev_upper = 0.0
+        prev_lower = 0.0
+        prev_super = np.nan
+        prev_close = np.nan
+        if i > 0:
+            prev_upper = final_upper[i - 1] if np.isfinite(final_upper[i - 1]) else 0.0
+            prev_lower = final_lower[i - 1] if np.isfinite(final_lower[i - 1]) else 0.0
+            prev_super = supertrend[i - 1]
+            prev_close = c[i - 1]
+
+        if np.isfinite(lower_band):
+            keep_lower = (lower_band > prev_lower) or (np.isfinite(prev_close) and prev_close < prev_lower)
+            final_lower[i] = lower_band if keep_lower else prev_lower
+        else:
+            final_lower[i] = prev_lower if i > 0 else np.nan
+
+        if np.isfinite(upper_band):
+            keep_upper = (upper_band < prev_upper) or (np.isfinite(prev_close) and prev_close > prev_upper)
+            final_upper[i] = upper_band if keep_upper else prev_upper
+        else:
+            final_upper[i] = prev_upper if i > 0 else np.nan
+
+        prev_atr = a[i - 1] if i > 0 else np.nan
+        if not np.isfinite(prev_atr):
+            direction[i] = 1.0
+        elif np.isfinite(prev_super) and np.isfinite(prev_upper) and prev_super == prev_upper:
+            direction[i] = -1.0 if (np.isfinite(c[i]) and np.isfinite(final_upper[i]) and c[i] > final_upper[i]) else 1.0
+        else:
+            direction[i] = 1.0 if (np.isfinite(c[i]) and np.isfinite(final_lower[i]) and c[i] < final_lower[i]) else -1.0
+
+        supertrend[i] = final_lower[i] if direction[i] == -1.0 else final_upper[i]
+
+    return pd.Series(supertrend, index=close.index, dtype=float), pd.Series(direction, index=close.index, dtype=float)
+
+
+def _compute_lux_machine_supertrend(
+    df: pd.DataFrame,
+    *,
+    atr_len: int = 10,
+    factor: float = 3.0,
+    training_data_period: int = 100,
+    highvol: float = 0.75,
+    midvol: float = 0.50,
+    lowvol: float = 0.25,
+    max_iter: int = 50,
+) -> pd.DataFrame:
+    out = pd.DataFrame(index=df.index.copy())
+    atr = _atr_wilder_from_bars(df, period=atr_len)
+    n = len(df)
+
+    assigned_atr = np.full(n, np.nan, dtype=float)
+    cluster_idx = np.full(n, np.nan, dtype=float)
+    centroid_high = np.full(n, np.nan, dtype=float)
+    centroid_mid = np.full(n, np.nan, dtype=float)
+    centroid_low = np.full(n, np.nan, dtype=float)
+
+    lookback = max(int(training_data_period), 3)
+    hv_guess = float(np.clip(highvol, 0.0, 1.0))
+    mv_guess = float(np.clip(midvol, 0.0, 1.0))
+    lv_guess = float(np.clip(lowvol, 0.0, 1.0))
+    max_steps = max(int(max_iter), 1)
+    atr_np = pd.to_numeric(atr, errors="coerce").to_numpy(dtype=float)
+
+    for i in range(n):
+        v = atr_np[i]
+        if not np.isfinite(v) or i < (lookback - 1):
+            continue
+        window = atr_np[i - lookback + 1 : i + 1]
+        window = window[np.isfinite(window)]
+        if window.size < 3:
+            assigned_atr[i] = v
+            continue
+
+        upper = float(np.nanmax(window))
+        lower = float(np.nanmin(window))
+        spread = upper - lower
+        c = np.array(
+            [
+                lower + spread * hv_guess,
+                lower + spread * mv_guess,
+                lower + spread * lv_guess,
+            ],
+            dtype=float,
+        )
+        if not np.isfinite(c).all():
+            med = float(np.nanmedian(window))
+            c = np.array([med, med, med], dtype=float)
+
+        for _ in range(max_steps):
+            d = np.abs(window[:, None] - c[None, :])
+            cls = np.argmin(d, axis=1)
+            new_c = c.copy()
+            for k in range(3):
+                pts = window[cls == k]
+                if pts.size > 0:
+                    new_c[k] = float(np.nanmean(pts))
+            if np.allclose(new_c, c, atol=1e-10, rtol=0.0, equal_nan=True):
+                c = new_c
+                break
+            c = new_c
+
+        d_curr = np.abs(c - v)
+        k_curr = int(np.argmin(d_curr))
+        assigned_atr[i] = c[k_curr]
+        cluster_idx[i] = float(k_curr)
+        centroid_high[i] = c[0]
+        centroid_mid[i] = c[1]
+        centroid_low[i] = c[2]
+
+    st, direction = _compute_pine_supertrend(
+        pd.to_numeric(df.get("high"), errors="coerce"),
+        pd.to_numeric(df.get("low"), errors="coerce"),
+        pd.to_numeric(df.get("close"), errors="coerce"),
+        pd.Series(assigned_atr, index=df.index, dtype=float),
+        factor=float(factor),
+    )
+    out["lux_ms_atr"] = atr
+    out["lux_ms_assigned_atr"] = pd.Series(assigned_atr, index=df.index, dtype=float)
+    out["lux_ms_cluster"] = pd.Series(cluster_idx, index=df.index, dtype=float)
+    out["lux_ms_centroid_high"] = pd.Series(centroid_high, index=df.index, dtype=float)
+    out["lux_ms_centroid_mid"] = pd.Series(centroid_mid, index=df.index, dtype=float)
+    out["lux_ms_centroid_low"] = pd.Series(centroid_low, index=df.index, dtype=float)
+    out["lux_ms_supertrend"] = st
+    out["lux_ms_direction"] = direction
+    # Pine direction convention: -1 bullish, +1 bearish.
+    out["lux_ms_bull"] = direction < 0
+    out["lux_ms_bear"] = direction > 0
+    return out
+
+
 def _join_reason_tokens(tokens: List[str]) -> str:
     out = [str(t).strip() for t in tokens if str(t).strip()]
     return ";".join(out) if out else "signal_neutral"
@@ -142,6 +314,10 @@ def _build_reason_for_row(row: pd.Series, action: str) -> str:
         long_tokens.append("supertrend_bullish")
     if bool(row.get("supertrend_bear", False)):
         short_tokens.append("supertrend_bearish")
+    if bool(row.get("lux_ms_bull", False)):
+        long_tokens.append("lux_ms_bullish")
+    if bool(row.get("lux_ms_bear", False)):
+        short_tokens.append("lux_ms_bearish")
     if bool(row.get("bos_up", False)):
         long_tokens.append("bos_up")
     if bool(row.get("bos_down", False)):
@@ -454,6 +630,17 @@ def _build_model_like_signals(df: pd.DataFrame, cfg: Dict[str, Any], market: str
     )
     out["supertrend_bull"] = out["supertrend_direction"] > 0
     out["supertrend_bear"] = out["supertrend_direction"] < 0
+    lux_ms = _compute_lux_machine_supertrend(
+        out,
+        atr_len=10,
+        factor=3.0,
+        training_data_period=100,
+        highvol=0.75,
+        midvol=0.50,
+        lowvol=0.25,
+    )
+    for col in lux_ms.columns:
+        out[col] = lux_ms[col]
 
     out["swing_high_20"] = out["high"].shift(1).rolling(20).max()
     out["swing_low_20"] = out["low"].shift(1).rolling(20).min()
@@ -561,11 +748,13 @@ def _build_model_like_signals(df: pd.DataFrame, cfg: Dict[str, Any], market: str
         out["ema_trend_bull"].astype(int)
         + out["macd_cross_up"].astype(int)
         + out["supertrend_bull"].astype(int)
+        + out["lux_ms_bull"].astype(int)
         + out["bos_up"].astype(int)
         + out["choch_bull"].astype(int)
         - out["ema_trend_bear"].astype(int)
         - out["macd_cross_down"].astype(int)
         - out["supertrend_bear"].astype(int)
+        - out["lux_ms_bear"].astype(int)
         - out["bos_down"].astype(int)
         - out["choch_bear"].astype(int)
     )
@@ -594,6 +783,12 @@ def _signal_from_baseline(
         if allow_short:
             return np.sign(ret)
         return (ret > 0).astype(float)
+    if strategy == "lux_machine_supertrend":
+        lux_dir = pd.to_numeric(frame.get("lux_ms_direction"), errors="coerce")
+        if allow_short:
+            # Pine convention: dir < 0 bullish, dir > 0 bearish.
+            return np.where(lux_dir < 0, 1.0, np.where(lux_dir > 0, -1.0, 0.0))
+        return np.where(lux_dir < 0, 1.0, 0.0)
     raise ValueError(f"Unsupported strategy: {strategy}")
 
 
@@ -602,6 +797,7 @@ def _run_strategy(
     *,
     strategy: str,
     allow_short: bool,
+    delay_bars: int,
     fee_bps: float,
     slippage_bps: float,
     impact_lambda_bps: float,
@@ -613,7 +809,8 @@ def _run_strategy(
     out = frame.copy()
     raw_signal = pd.Series(_signal_from_baseline(out, strategy, allow_short=allow_short), index=out.index)
     out["signal"] = pd.to_numeric(raw_signal, errors="coerce").fillna(0.0).clip(-1.0, 1.0)
-    out["position"] = out["signal"].shift(1).fillna(0.0)
+    lag = max(int(delay_bars), 0)
+    out["position"] = out["signal"].shift(lag).fillna(0.0)
     for col in [
         "trade_signal",
         "trade_reason_tokens",
@@ -910,6 +1107,15 @@ def _build_fold_ranges(
     return ranges
 
 
+def _normalize_strategy_list(strategies: List[str]) -> List[str]:
+    out = [str(x) for x in strategies]
+    if "policy" not in out:
+        out = ["policy"] + out
+    if "lux_machine_supertrend" not in out:
+        out.append("lux_machine_supertrend")
+    return out
+
+
 def _run_backtest_on_modeled(
     *,
     modeled: pd.DataFrame,
@@ -919,6 +1125,7 @@ def _run_backtest_on_modeled(
     min_train_size: int,
     test_size: int,
     max_folds: int,
+    delay_bars: int,
     fee_bps: float,
     slippage_bps: float,
     impact_lambda_bps: float,
@@ -948,6 +1155,7 @@ def _run_backtest_on_modeled(
                 base,
                 strategy=str(strategy),
                 allow_short=allow_short_default,
+                delay_bars=delay_bars,
                 fee_bps=fee_bps,
                 slippage_bps=slippage_bps,
                 impact_lambda_bps=impact_lambda_bps,
@@ -1071,6 +1279,9 @@ def run_single_symbol_backtest(
     provider: str | None = None,
     fallback_symbol: str | None = None,
     lookback_days: int | None = None,
+    fee_bps: float | None = None,
+    slippage_bps: float | None = None,
+    delay_bars: int | None = None,
 ) -> Dict[str, pd.DataFrame]:
     cfg = load_config(config_path)
     bt_cfg = cfg.get("backtest_multi_market", {})
@@ -1081,13 +1292,17 @@ def run_single_symbol_backtest(
     min_train_size = int(bt_cfg.get("min_train_size", 180))
     test_size = int(bt_cfg.get("test_size", 60))
     max_folds = int(bt_cfg.get("max_folds", 4))
-    strategies = bt_cfg.get("strategies", ["policy", "buy_hold", "ma_crossover", "naive_prev_bar"])
-    if "policy" not in strategies:
-        strategies = ["policy"] + list(strategies)
+    strategies = _normalize_strategy_list(
+        bt_cfg.get("strategies", ["policy", "buy_hold", "ma_crossover", "naive_prev_bar", "lux_machine_supertrend"])
+    )
     policy_cfg = get_policy_config(cfg)
     exec_cfg = policy_cfg.get("execution", {})
-    fee_bps = _safe_float(exec_cfg.get("fee_bps", 10.0))
-    slippage_bps = _safe_float(exec_cfg.get("slippage_bps", 10.0))
+    fee_bps_cfg = _safe_float(exec_cfg.get("fee_bps", 10.0))
+    slippage_bps_cfg = _safe_float(exec_cfg.get("slippage_bps", 10.0))
+    delay_cfg = int(bt_cfg.get("delay_bars", 1))
+    fee_bps_val = _safe_float(fee_bps) if fee_bps is not None else fee_bps_cfg
+    slippage_bps_val = _safe_float(slippage_bps) if slippage_bps is not None else slippage_bps_cfg
+    delay_bars_val = int(delay_bars) if delay_bars is not None else delay_cfg
     impact_cfg = bt_cfg.get("impact", {})
     impact_lambda_bps = _safe_float(impact_cfg.get("lambda_bps", 1.0))
     impact_beta = _safe_float(impact_cfg.get("beta", 0.5))
@@ -1149,8 +1364,9 @@ def run_single_symbol_backtest(
         min_train_size=min_train_size,
         test_size=test_size,
         max_folds=max_folds,
-        fee_bps=fee_bps,
-        slippage_bps=slippage_bps,
+        delay_bars=delay_bars_val,
+        fee_bps=fee_bps_val,
+        slippage_bps=slippage_bps_val,
         impact_lambda_bps=impact_lambda_bps,
         impact_beta=impact_beta,
         risk_exit_enabled=risk_exit_enabled,
@@ -1177,14 +1393,15 @@ def run_multi_market_backtest(config_path: str) -> None:
     min_train_size = int(bt_cfg.get("min_train_size", 180))
     test_size = int(bt_cfg.get("test_size", 60))
     max_folds = int(bt_cfg.get("max_folds", 4))
-    strategies = bt_cfg.get("strategies", ["policy", "buy_hold", "ma_crossover", "naive_prev_bar"])
-    if "policy" not in strategies:
-        strategies = ["policy"] + list(strategies)
+    strategies = _normalize_strategy_list(
+        bt_cfg.get("strategies", ["policy", "buy_hold", "ma_crossover", "naive_prev_bar", "lux_machine_supertrend"])
+    )
 
     policy_cfg = get_policy_config(cfg)
     exec_cfg = policy_cfg.get("execution", {})
     fee_bps = _safe_float(exec_cfg.get("fee_bps", 10.0))
     slippage_bps = _safe_float(exec_cfg.get("slippage_bps", 10.0))
+    delay_bars = int(bt_cfg.get("delay_bars", 1))
     impact_cfg = bt_cfg.get("impact", {})
     impact_lambda_bps = _safe_float(impact_cfg.get("lambda_bps", 1.0))
     impact_beta = _safe_float(impact_cfg.get("beta", 0.5))
@@ -1199,16 +1416,25 @@ def run_multi_market_backtest(config_path: str) -> None:
     if not np.isfinite(fallback_take_profit_pct) or fallback_take_profit_pct <= 0:
         fallback_take_profit_pct = 0.03
 
+    cost_cfg = cfg.get("cost_stress", {}) if isinstance(cfg, dict) else {}
+    cost_stress_enabled = bool(cost_cfg.get("enabled", True))
+    fee_grid = [float(x) for x in cost_cfg.get("fee_bps_grid", [2, 5, 10])]
+    slippage_grid = [float(x) for x in cost_cfg.get("slippage_bps_grid", [1, 3, 8])]
+    delay_grid = [int(x) for x in cost_cfg.get("delay_bars_grid", [0, 1, 2])]
+    stress_strategy = str(cost_cfg.get("strategy", "policy"))
+
     universe = _build_universe_for_backtest(cfg)
     if universe.empty:
         print("[WARN] No instruments available for multi-market backtest.")
         return
+    save_json({"rows": universe.to_dict(orient="records")}, out_dir / "universe_snapshot.json")
 
     metrics_rows: List[Dict[str, Any]] = []
     equity_rows: List[pd.DataFrame] = []
     trade_rows: List[pd.DataFrame] = []
     latest_signal_rows: List[pd.DataFrame] = []
     integrity_rows: List[Dict[str, Any]] = []
+    cost_stress_rows: List[Dict[str, Any]] = []
 
     for _, inst in universe.iterrows():
         market = str(inst.get("market", ""))
@@ -1288,6 +1514,7 @@ def run_multi_market_backtest(config_path: str) -> None:
             min_train_size=min_train_size,
             test_size=test_size,
             max_folds=max_folds,
+            delay_bars=delay_bars,
             fee_bps=fee_bps,
             slippage_bps=slippage_bps,
             impact_lambda_bps=impact_lambda_bps,
@@ -1308,6 +1535,38 @@ def run_multi_market_backtest(config_path: str) -> None:
         sig_df = result.get("latest_signal", pd.DataFrame())
         if not sig_df.empty:
             latest_signal_rows.append(sig_df)
+
+        if cost_stress_enabled:
+            for fee_i, slip_i, delay_i in product(fee_grid, slippage_grid, delay_grid):
+                stress = _run_backtest_on_modeled(
+                    modeled=modeled,
+                    market=market,
+                    symbol=symbol,
+                    strategies=[stress_strategy],
+                    min_train_size=min_train_size,
+                    test_size=test_size,
+                    max_folds=max_folds,
+                    delay_bars=int(delay_i),
+                    fee_bps=float(fee_i),
+                    slippage_bps=float(slip_i),
+                    impact_lambda_bps=impact_lambda_bps,
+                    impact_beta=impact_beta,
+                    risk_exit_enabled=risk_exit_enabled,
+                    fallback_stop_loss_pct=fallback_stop_loss_pct,
+                    fallback_take_profit_pct=fallback_take_profit_pct,
+                )
+                ssum = stress.get("metrics_summary", pd.DataFrame())
+                if ssum.empty:
+                    continue
+                row = ssum.iloc[0].to_dict()
+                row.update(
+                    {
+                        "fee_bps": float(fee_i),
+                        "slippage_bps": float(slip_i),
+                        "delay_bars": int(delay_i),
+                    }
+                )
+                cost_stress_rows.append(row)
 
     if not metrics_rows:
         print("[WARN] Multi-market backtest produced no metrics.")
@@ -1379,6 +1638,7 @@ def run_multi_market_backtest(config_path: str) -> None:
             )
     compare_df = pd.DataFrame(compare_rows)
     write_csv(compare_df, out_dir / "compare_baselines.csv")
+    write_csv(pd.DataFrame(cost_stress_rows), out_dir / "cost_stress_matrix.csv")
 
     metrics_payload = {
         "generated_at_utc": pd.Timestamp.now(tz="UTC").strftime("%Y-%m-%d %H:%M:%S UTC"),

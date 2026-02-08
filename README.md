@@ -46,9 +46,13 @@ pip install -r requirements.txt
 
 ```bash
 python -m src.ingestion.update_data --config configs/config.yaml
+python -m src.preprocessing.validate_data --config configs/config.yaml
 python -m src.features.build_features --config configs/config.yaml
 python -m src.labels.build_labels --config configs/config.yaml
+python -m src.split.build_folds --config configs/config.yaml
+python -m src.models.hpo --config configs/config.yaml
 python -m src.models.train --config configs/config.yaml
+python -m src.models.calibrate --config configs/config.yaml
 python -m src.models.predict --config configs/config.yaml
 python -m src.markets.snapshot --config configs/config.yaml
 python -m src.markets.tracking --config configs/config.yaml
@@ -57,6 +61,9 @@ python -m src.models.generate_policy_signals --config configs/config.yaml
 python -m src.evaluation.walk_forward --config configs/config.yaml
 python -m src.evaluation.backtest --config configs/config.yaml
 python -m src.evaluation.backtest_multi_market --config configs/config.yaml
+python -m src.monitoring.drift --config configs/config.yaml
+python -m src.monitoring.retirement --config configs/config.yaml
+python -m src.reporting.export_report --config configs/config.yaml
 python -m streamlit run dashboard/app.py
 ```
 
@@ -143,3 +150,17 @@ Generated files under `data/processed/backtest/`:
 - `survivorship_coverage.csv`
 
 Dashboard now includes page: `交易时间段预测（Crypto）`.
+
+## Governance Outputs
+
+The pipeline now emits governance artifacts aligned with `Pick_stock/model_training_playbook.md`:
+- `data/processed/data_integrity_checks.json`
+- `data/processed/folds_manifest.csv`
+- `data/processed/hpo_trials.csv`
+- `data/processed/hpo_best_config.yaml`
+- `data/processed/holdout_report.json`
+- `data/processed/threshold_report.csv`
+- `data/processed/backtest/cost_stress_matrix.csv`
+- `data/processed/drift_monitor_daily.csv`
+- `data/processed/model_status.csv`
+- `data/processed/go_live_decision.json`
