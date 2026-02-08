@@ -647,8 +647,21 @@ def apply_decision_to_paper_book(
     order_id = str(uuid.uuid4())
     now = _utc_now_text()
     gate_status = str(packet.get("gate_status", "")).strip().upper()
+    trade_status = str(packet.get("trade_status", "")).strip().upper()
+    trade_status_note = str(packet.get("trade_status_note", "")).strip()
+    entry_touched = bool(packet.get("entry_touched", False))
+    if action in {"LONG", "SHORT"} and not trade_status:
+        trade_status = "READY" if entry_touched else "WAIT_ENTRY"
+    non_exec_reason_map = {
+        "WAIT_ENTRY": "waiting_entry_touch",
+        "WAIT_RULES": "rule_not_passed",
+        "EXPIRED": "signal_expired",
+        "BLOCKED": "trade_status_blocked",
+    }
 
     if action not in {"LONG", "SHORT"}:
+        reason_code = non_exec_reason_map.get(trade_status, "wait_signal")
+        reason_msg = trade_status_note or f"non-executable status: {trade_status or 'WAIT'}"
         order_row = {
             "order_id": order_id,
             "decision_id": decision_id,
@@ -664,7 +677,7 @@ def apply_decision_to_paper_book(
             "fill_model": fill_mode,
             "created_at_utc": now,
             "filled_at_utc": "",
-            "reason_code": "wait_signal",
+            "reason_code": reason_code,
         }
         orders = _append_row(orders, order_row)
         _save_table(output_dir / "paper_orders.csv", orders)
@@ -687,12 +700,64 @@ def apply_decision_to_paper_book(
                 "delay_bars": delay_bars,
                 "fill_model": fill_mode,
                 "status": "ok",
-                "message": "WAIT decision recorded (no order placed)",
+                "message": reason_msg,
             },
         )
         return {
             "status": "ok",
-            "message": "WAIT decision recorded (no order placed)",
+            "message": reason_msg,
+            "artifacts": {"orders": orders, "fills": fills, "positions": positions, "daily_pnl": daily},
+        }
+
+    if trade_status in {"WAIT_ENTRY", "WAIT_RULES", "EXPIRED", "BLOCKED"}:
+        reason_code = non_exec_reason_map.get(trade_status, "trade_status_not_ready")
+        row_status = "blocked" if trade_status in {"BLOCKED", "EXPIRED"} else "skipped"
+        reason_msg = trade_status_note or f"trade_status={trade_status}"
+        order_row = {
+            "order_id": order_id,
+            "decision_id": decision_id,
+            "market": market,
+            "symbol": symbol,
+            "side": action.lower(),
+            "qty": qty,
+            "order_type": "market",
+            "status": row_status,
+            "requested_price": req_price,
+            "filled_price": np.nan,
+            "delay_bars": delay_bars,
+            "fill_model": fill_mode,
+            "created_at_utc": now,
+            "filled_at_utc": "",
+            "reason_code": reason_code,
+        }
+        orders = _append_row(orders, order_row)
+        _save_table(output_dir / "paper_orders.csv", orders)
+        _save_table(output_dir / "paper_fills.csv", fills)
+        _save_table(output_dir / "paper_positions.csv", positions)
+        daily = _save_daily_pnl(positions, output_dir)
+        _append_run_log(
+            output_dir,
+            {
+                "timestamp_utc": now,
+                "trace_id": trace_id,
+                "decision_id": decision_id,
+                "order_id": order_id,
+                "market": market,
+                "symbol": symbol,
+                "action": action,
+                "trade_status": trade_status,
+                "gate_status": gate_status or "PASS",
+                "kill_switch_active": bool(kill_switch.get("active", False)),
+                "health_consecutive_pass": _safe_int(health_streak.get("consecutive_pass", 0), default=0),
+                "delay_bars": delay_bars,
+                "fill_model": fill_mode,
+                "status": row_status,
+                "message": reason_msg,
+            },
+        )
+        return {
+            "status": "skipped",
+            "message": f"{reason_code}: {reason_msg}",
             "artifacts": {"orders": orders, "fills": fills, "positions": positions, "daily_pnl": daily},
         }
 

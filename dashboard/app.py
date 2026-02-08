@@ -2222,6 +2222,141 @@ def _reliability_level_text(summary: Dict[str, float] | None) -> str:
     )
 
 
+def _entry_touch_state_path(processed_dir: Path | None = None) -> Path:
+    root = processed_dir or Path("data/processed")
+    out = root / "execution"
+    out.mkdir(parents=True, exist_ok=True)
+    return out / "entry_touch_state.json"
+
+
+def _load_entry_touch_state(processed_dir: Path | None = None) -> Dict[str, Dict[str, object]]:
+    path = _entry_touch_state_path(processed_dir)
+    if not path.exists():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    if not isinstance(payload, dict):
+        return {}
+    out: Dict[str, Dict[str, object]] = {}
+    for k, v in payload.items():
+        if isinstance(v, dict):
+            out[str(k)] = v
+    return out
+
+
+def _save_entry_touch_state(state: Dict[str, Dict[str, object]], processed_dir: Path | None = None) -> None:
+    path = _entry_touch_state_path(processed_dir)
+    if len(state) > 2000:
+        items = sorted(
+            state.items(),
+            key=lambda kv: str(kv[1].get("updated_at_utc", "")),
+            reverse=True,
+        )[:2000]
+        state = dict(items)
+    path.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _default_entry_band_pct(market: str) -> float:
+    mk = str(market or "").strip().lower()
+    if mk == "crypto":
+        return 0.0015
+    if mk == "cn_equity":
+        return 0.0010
+    if mk == "us_equity":
+        return 0.0008
+    return 0.0010
+
+
+def _plan_level_side(
+    *,
+    action: str,
+    q50: float,
+    p_up: float,
+    edge_risk_long: float,
+    edge_risk_short: float,
+) -> str:
+    if action in {"LONG", "SHORT"}:
+        return action
+    if np.isfinite(edge_risk_long) and np.isfinite(edge_risk_short):
+        return "LONG" if edge_risk_long >= edge_risk_short else "SHORT"
+    if np.isfinite(q50):
+        return "LONG" if q50 >= 0 else "SHORT"
+    if np.isfinite(p_up):
+        return "LONG" if p_up >= 0.5 else "SHORT"
+    return "LONG"
+
+
+def _compute_plan_levels(
+    *,
+    side: str,
+    entry: float,
+    q10: float,
+    q50: float,
+    q90: float,
+    atr_proxy_pct: float,
+    atr_mult: float,
+    tp_mode: str,
+    sl_mode: str,
+) -> Tuple[float, float, float, float]:
+    if not np.isfinite(entry):
+        return float("nan"), float("nan"), float("nan"), float("nan")
+    sl = float("nan")
+    tp = float("nan")
+    tp2 = float("nan")
+    rr = float("nan")
+    if side == "LONG":
+        atr_stop_ret = -atr_mult * atr_proxy_pct
+        q10_ret = q10 if np.isfinite(q10) else float("nan")
+        if sl_mode == "max_q10_atr":
+            sl_ret = max(q10_ret if np.isfinite(q10_ret) else -999.0, atr_stop_ret)
+        elif sl_mode == "q10_pref":
+            sl_ret = q10_ret if np.isfinite(q10_ret) else atr_stop_ret
+        else:
+            sl_ret = atr_stop_ret if np.isfinite(atr_stop_ret) else q10_ret
+        sl = entry * (1.0 + sl_ret)
+        if tp_mode == "q90":
+            tp_ret = q90 if np.isfinite(q90) else q50
+        elif tp_mode == "mid":
+            if np.isfinite(q50) and np.isfinite(q90):
+                tp_ret = 0.5 * (q50 + q90)
+            else:
+                tp_ret = q50 if np.isfinite(q50) else q90
+        else:
+            tp_ret = q50 if np.isfinite(q50) else q90
+        tp = entry * (1.0 + tp_ret) if np.isfinite(tp_ret) else float("nan")
+        tp2 = entry * (1.0 + q90) if np.isfinite(q90) else float("nan")
+        risk = entry - sl
+        reward = tp - entry
+        rr = _safe_float(reward / risk) if np.isfinite(risk) and risk > 1e-12 else float("nan")
+    else:
+        atr_stop_ret = atr_mult * atr_proxy_pct
+        q90_ret = q90 if np.isfinite(q90) else float("nan")
+        if sl_mode == "max_q10_atr":
+            sl_ret = min(q90_ret if np.isfinite(q90_ret) else 999.0, atr_stop_ret)
+        elif sl_mode == "q10_pref":
+            sl_ret = q90_ret if np.isfinite(q90_ret) else atr_stop_ret
+        else:
+            sl_ret = atr_stop_ret if np.isfinite(atr_stop_ret) else q90_ret
+        sl = entry * (1.0 + sl_ret)
+        if tp_mode == "q90":
+            tp_ret = q10 if np.isfinite(q10) else q50
+        elif tp_mode == "mid":
+            if np.isfinite(q10) and np.isfinite(q50):
+                tp_ret = 0.5 * (q10 + q50)
+            else:
+                tp_ret = q50 if np.isfinite(q50) else q10
+        else:
+            tp_ret = q50 if np.isfinite(q50) else q10
+        tp = entry * (1.0 + tp_ret) if np.isfinite(tp_ret) else float("nan")
+        tp2 = entry * (1.0 + q10) if np.isfinite(q10) else float("nan")
+        risk = sl - entry
+        reward = entry - tp
+        rr = _safe_float(reward / risk) if np.isfinite(risk) and risk > 1e-12 else float("nan")
+    return sl, tp, tp2, rr
+
+
 def _build_trade_decision_plan(
     row: pd.Series,
     *,
@@ -2229,6 +2364,8 @@ def _build_trade_decision_plan(
     risk_profile: str = "标准",
     model_health: str = "中",
     event_risk: bool = False,
+    persist_touch: bool = True,
+    processed_dir: Path | None = None,
 ) -> Dict[str, object]:
     cfg_local = cfg or _load_main_config_cached("configs/config.yaml")
     policy_cfg = (cfg_local.get("policy", {}) if isinstance(cfg_local, dict) else {})
@@ -2251,6 +2388,88 @@ def _build_trade_decision_plan(
     risk_level = str(row.get("risk_level", "medium"))
     allow_short = bool(row.get("policy_allow_short", True))
     horizon_label = str(row.get("horizon_label", "4h"))
+    market = str(row.get("market", "")).strip().lower()
+    symbol = str(row.get("symbol", row.get("snapshot_symbol", ""))).strip()
+    price_source = str(row.get("price_source", "-"))
+    price_timestamp_market = str(
+        row.get(
+            "price_timestamp_market",
+            row.get("timestamp_market", row.get("latest_market", row.get("generated_at_market", "-"))),
+        )
+    )
+    price_timestamp_utc = str(
+        row.get(
+            "price_timestamp_utc",
+            row.get("timestamp_utc", row.get("latest_utc", row.get("generated_at_utc", "-"))),
+        )
+    )
+    signal_time_utc = str(row.get("generated_at_utc", row.get("timestamp_utc", price_timestamp_utc)))
+    valid_until = str(row.get("expected_date_market", row.get("expected_date_utc", "-")))
+    entry_candidates = [
+        _safe_float(row.get("signal_entry_price")),
+        _safe_float(row.get("entry_price_snapshot")),
+        _safe_float(row.get("plan_entry")),
+        _safe_float(row.get("entry")),
+        current_price,
+    ]
+    entry_seed = next((x for x in entry_candidates if np.isfinite(x)), float("nan"))
+    entry_band_cfg = ((cfg_local.get("decision", {}) if isinstance(cfg_local, dict) else {}).get("entry_band_pct", {}))
+    entry_band_pct = float("nan")
+    if isinstance(entry_band_cfg, dict):
+        entry_band_pct = _safe_float(entry_band_cfg.get(market, entry_band_cfg.get("default")))
+    elif _is_finite_number(entry_band_cfg):
+        entry_band_pct = float(entry_band_cfg)
+    if not np.isfinite(entry_band_pct) or entry_band_pct <= 0:
+        entry_band_pct = _default_entry_band_pct(market)
+    entry_band_pct = float(np.clip(entry_band_pct, 0.0002, 0.02))
+    key_raw = "|".join(
+        [
+            market or "-",
+            symbol or "-",
+            horizon_label or "-",
+            valid_until or "-",
+            f"{_safe_float(q50):.6f}",
+            f"{_safe_float(p_up):.6f}",
+            str(risk_profile),
+        ]
+    )
+    signal_key = hashlib.sha1(key_raw.encode("utf-8")).hexdigest()[:20]
+    entry = entry_seed
+    entry_touched_at = ""
+    if persist_touch:
+        state = _load_entry_touch_state(processed_dir)
+        rec = state.get(signal_key, {})
+        rec_entry = _safe_float(rec.get("entry_price"))
+        if np.isfinite(rec_entry):
+            entry = rec_entry
+        entry_touched_at = str(rec.get("entry_touched_at", "")).strip()
+    else:
+        state = {}
+    entry_gap_pct = (
+        _safe_float((current_price - entry) / entry)
+        if np.isfinite(current_price) and np.isfinite(entry) and abs(entry) > 1e-12
+        else float("nan")
+    )
+    entry_touched = bool(np.isfinite(entry_gap_pct) and abs(entry_gap_pct) <= entry_band_pct)
+    if entry_touched and not entry_touched_at:
+        tz_name = str(row.get("timezone", "Asia/Shanghai")) or "Asia/Shanghai"
+        try:
+            entry_touched_at = pd.Timestamp.now(tz=tz_name).strftime("%Y-%m-%d %H:%M:%S %z")
+        except Exception:
+            entry_touched_at = pd.Timestamp.now(tz="UTC").strftime("%Y-%m-%d %H:%M:%S UTC")
+    if persist_touch:
+        state[signal_key] = {
+            "market": market,
+            "symbol": symbol,
+            "horizon_label": horizon_label,
+            "entry_price": entry,
+            "entry_band_pct": entry_band_pct,
+            "entry_touched_at": entry_touched_at,
+            "signal_time_utc": signal_time_utc,
+            "valid_until": valid_until,
+            "updated_at_utc": pd.Timestamp.now(tz="UTC").strftime("%Y-%m-%d %H:%M:%S UTC"),
+        }
+        _save_entry_touch_state(state, processed_dir)
     width = _safe_float(q90 - q10)
     if not np.isfinite(width):
         width = _safe_float(row.get("volatility_score"))
@@ -2291,11 +2510,7 @@ def _build_trade_decision_plan(
     elif long_ok and short_ok:
         action = "LONG" if edge_risk_long >= edge_risk_short else "SHORT"
 
-    entry = current_price
-    sl = float("nan")
-    tp = float("nan")
-    tp2 = float("nan")
-    rr = float("nan")
+    # entry is fixed at signal snapshot (or persisted state), not refreshed with current price.
     profile_key = {
         "conservative": "conservative",
         "standard": "standard",
@@ -2323,7 +2538,25 @@ def _build_trade_decision_plan(
         atr_mult = 1.5
         tp_mode = "mid"
         sl_mode = "atr_pref"
-    if action == "LONG" and np.isfinite(current_price):
+    plan_side = _plan_level_side(
+        action=action,
+        q50=q50,
+        p_up=p_up,
+        edge_risk_long=edge_risk_long,
+        edge_risk_short=edge_risk_short,
+    )
+    sl, tp, tp2, rr = _compute_plan_levels(
+        side=plan_side,
+        entry=entry,
+        q10=q10,
+        q50=q50,
+        q90=q90,
+        atr_proxy_pct=atr_proxy_pct,
+        atr_mult=atr_mult,
+        tp_mode=tp_mode,
+        sl_mode=sl_mode,
+    )
+    if action == "LONG" and np.isfinite(entry):
         atr_stop_ret = -atr_mult * atr_proxy_pct
         q10_ret = q10 if np.isfinite(q10) else float("nan")
         if sl_mode == "max_q10_atr":
@@ -2332,7 +2565,7 @@ def _build_trade_decision_plan(
             sl_ret = q10_ret if np.isfinite(q10_ret) else atr_stop_ret
         else:
             sl_ret = atr_stop_ret if np.isfinite(atr_stop_ret) else q10_ret
-        sl = current_price * (1.0 + sl_ret)
+        sl = entry * (1.0 + sl_ret)
         if tp_mode == "q90":
             tp_ret = q90 if np.isfinite(q90) else q50
         elif tp_mode == "mid":
@@ -2342,8 +2575,8 @@ def _build_trade_decision_plan(
                 tp_ret = q50 if np.isfinite(q50) else q90
         else:
             tp_ret = q50 if np.isfinite(q50) else q90
-        tp = current_price * (1.0 + tp_ret) if np.isfinite(tp_ret) else float("nan")
-        tp2 = current_price * (1.0 + q90) if np.isfinite(q90) else float("nan")
+        tp = entry * (1.0 + tp_ret) if np.isfinite(tp_ret) else float("nan")
+        tp2 = entry * (1.0 + q90) if np.isfinite(q90) else float("nan")
         risk = entry - sl
         reward = tp - entry
         rr = _safe_float(reward / risk) if np.isfinite(risk) and risk > 1e-12 else float("nan")
@@ -2351,7 +2584,7 @@ def _build_trade_decision_plan(
             "做多条件满足：方向概率、edge、置信度与风险过滤均通过。",
             "Long conditions satisfied: direction probability, edge, confidence, and risk filters all pass.",
         )
-    elif action == "SHORT" and np.isfinite(current_price):
+    elif action == "SHORT" and np.isfinite(entry):
         atr_stop_ret = atr_mult * atr_proxy_pct
         q90_ret = q90 if np.isfinite(q90) else float("nan")
         if sl_mode == "max_q10_atr":
@@ -2360,7 +2593,7 @@ def _build_trade_decision_plan(
             sl_ret = q90_ret if np.isfinite(q90_ret) else atr_stop_ret
         else:
             sl_ret = atr_stop_ret if np.isfinite(atr_stop_ret) else q90_ret
-        sl = current_price * (1.0 + sl_ret)
+        sl = entry * (1.0 + sl_ret)
         if tp_mode == "q90":
             tp_ret = q10 if np.isfinite(q10) else q50
         elif tp_mode == "mid":
@@ -2370,14 +2603,20 @@ def _build_trade_decision_plan(
                 tp_ret = q50 if np.isfinite(q50) else q10
         else:
             tp_ret = q50 if np.isfinite(q50) else q10
-        tp = current_price * (1.0 + tp_ret) if np.isfinite(tp_ret) else float("nan")
-        tp2 = current_price * (1.0 + q10) if np.isfinite(q10) else float("nan")
+        tp = entry * (1.0 + tp_ret) if np.isfinite(tp_ret) else float("nan")
+        tp2 = entry * (1.0 + q10) if np.isfinite(q10) else float("nan")
         risk = sl - entry
         reward = entry - tp
         rr = _safe_float(reward / risk) if np.isfinite(risk) and risk > 1e-12 else float("nan")
         action_reason = _t(
             "做空条件满足：方向概率、edge、置信度与风险过滤均通过。",
             "Short conditions satisfied: direction probability, edge, confidence, and risk filters all pass.",
+        )
+
+    if action == "WAIT" and entry_touched:
+        action_reason = _t(
+            "已到价，但规则未完全通过，建议继续观察。",
+            "Entry touched, but rule checks are not fully passed. Keep waiting.",
         )
 
     if action == "LONG":
@@ -2388,6 +2627,39 @@ def _build_trade_decision_plan(
         selected_checks = long_checks if sum(1 for _, ok in long_checks if ok) >= sum(1 for _, ok in short_checks if ok) else short_checks
     checks_passed = int(sum(1 for _, ok in selected_checks if ok))
     checks_total = int(len(selected_checks))
+    failed_checks = [label for label, ok in selected_checks if not ok]
+    gate_blocked = not (np.isfinite(current_price) and np.isfinite(entry))
+    valid_until_ts = pd.to_datetime(valid_until, utc=True, errors="coerce")
+    expired = bool(pd.notna(valid_until_ts) and pd.Timestamp.now(tz="UTC") > valid_until_ts)
+    if gate_blocked:
+        trade_status = "BLOCKED"
+    elif expired:
+        trade_status = "EXPIRED"
+    elif action in {"LONG", "SHORT"}:
+        trade_status = "READY" if entry_touched else "WAIT_ENTRY"
+    else:
+        trade_status = "WAIT_RULES"
+    status_text_map = {
+        "READY": _t("可执行", "Ready"),
+        "WAIT_ENTRY": _t("等待到价", "Waiting Entry"),
+        "WAIT_RULES": _t("规则未通过", "Rules Not Passed"),
+        "BLOCKED": _t("阻断", "Blocked"),
+        "EXPIRED": _t("已过期", "Expired"),
+    }
+    if trade_status == "READY":
+        trade_status_note = _t("已到价 + 规则通过，可执行。", "Entry touched + rules passed, executable.")
+    elif trade_status == "WAIT_ENTRY":
+        trade_status_note = _t("规则已通过，等待到价。", "Rules passed, waiting for entry touch.")
+    elif trade_status == "WAIT_RULES" and entry_touched:
+        fail_text = " / ".join(failed_checks[:3]) if failed_checks else _t("未知", "unknown")
+        trade_status_note = _t(f"已到价，但规则未通过：{fail_text}", f"Entry touched but rules failed: {fail_text}")
+    elif trade_status == "WAIT_RULES":
+        fail_text = " / ".join(failed_checks[:3]) if failed_checks else _t("未知", "unknown")
+        trade_status_note = _t(f"规则未通过：{fail_text}", f"Rules failed: {fail_text}")
+    elif trade_status == "EXPIRED":
+        trade_status_note = _t("信号已过期，请刷新重算。", "Signal expired. Refresh and recompute.")
+    else:
+        trade_status_note = _t("价格/数据缺失，暂不可执行。", "Price/data missing. Execution blocked.")
 
     strength = _signal_strength_label(abs(_safe_float(p_up - 0.5)) * 100.0 if np.isfinite(p_up) else float("nan"), 2.0, 5.0)
     return {
@@ -2399,6 +2671,22 @@ def _build_trade_decision_plan(
         "take_profit": tp,
         "take_profit_2": tp2,
         "rr": rr,
+        "plan_side": plan_side,
+        "plan_side_text": _t("做多预案", "Long plan") if plan_side == "LONG" else _t("做空预案", "Short plan"),
+        "entry_band_pct": entry_band_pct,
+        "entry_gap_pct": entry_gap_pct,
+        "entry_touched": entry_touched,
+        "entry_touched_at": entry_touched_at,
+        "trade_status": trade_status,
+        "trade_status_text": status_text_map.get(trade_status, trade_status),
+        "trade_status_note": trade_status_note,
+        "signal_key": signal_key,
+        "signal_time_utc": signal_time_utc,
+        "valid_until": valid_until,
+        "price_source": price_source,
+        "price_timestamp_market": price_timestamp_market,
+        "price_timestamp_utc": price_timestamp_utc,
+        "failed_checks": failed_checks,
         "horizon_label": horizon_label,
         "risk_level": risk_level,
         "confidence_score": conf,
@@ -2454,6 +2742,11 @@ def _render_trade_decision_summary(
         )
     )
 
+    status = str(plan.get("trade_status", "WAIT_RULES"))
+    status_text = str(plan.get("trade_status_text", status))
+    status_note = str(plan.get("trade_status_note", "-"))
+    st.info(f"{_t('交易状态', 'Trade Status')}: {status_text} | {status_note}")
+
     c1, c2, c3, c4 = st.columns(4)
     c1.metric(_t("推荐入场", "Suggested Entry"), _format_price(plan.get("entry")))
     c2.metric(_t("止损", "Stop Loss"), _format_price(plan.get("stop_loss")))
@@ -2474,6 +2767,17 @@ def _render_trade_decision_summary(
         else (plan.get("edge_risk_short") if str(plan.get("action", "WAIT")) == "SHORT" else float("nan"))
     )
     c12.metric("Edge/Risk", _format_float(active_edge_risk, 3))
+    c13, c14, c15, c16 = st.columns(4)
+    c13.metric(_t("距入场(%)", "Entry Gap (%)"), _format_change_pct(plan.get("entry_gap_pct")))
+    c14.metric(
+        _t("到价触发", "Entry Touched"),
+        _t("已触发", "Touched") if bool(plan.get("entry_touched", False)) else _t("未触发", "Not yet"),
+    )
+    c15.metric(
+        _t("首次触发时间", "First Touch Time"),
+        str(plan.get("entry_touched_at", "-")) if str(plan.get("entry_touched_at", "")).strip() else "-",
+    )
+    c16.metric(_t("预案方向", "Plan Side"), str(plan.get("plan_side_text", "-")))
     st.caption(
         _t(
             f"P(up): {_format_change_pct(plan.get('p_up')).replace('+','')} | "
@@ -2482,6 +2786,14 @@ def _render_trade_decision_summary(
             f"P(up): {_format_change_pct(plan.get('p_up')).replace('+','')} | "
             f"P(down): {_format_change_pct(plan.get('p_down')).replace('+','')} | "
             f"Cost basis: round-trip {float(plan.get('cost_bps', 0.0)):.1f} bps (open+close)",
+        )
+    )
+    st.caption(
+        _t(
+            f"价格源: {plan.get('price_source', '-')} | 市场时间: {plan.get('price_timestamp_market', '-')} | UTC: {plan.get('price_timestamp_utc', '-')} | "
+            f"信号时间(UTC): {plan.get('signal_time_utc', '-')} | 有效期: {plan.get('valid_until', '-')}",
+            f"Price source: {plan.get('price_source', '-')} | Market ts: {plan.get('price_timestamp_market', '-')} | UTC: {plan.get('price_timestamp_utc', '-')} | "
+            f"Signal time (UTC): {plan.get('signal_time_utc', '-')} | Valid until: {plan.get('valid_until', '-')}",
         )
     )
     if backtest_policy_row is not None:
@@ -2712,6 +3024,7 @@ def _packet_preview_row(packet: Dict[str, object]) -> Dict[str, object]:
         "sl": _format_price(packet.get("sl")),
         "tp1": _format_price(packet.get("tp1")),
         "rr": _format_float(packet.get("rr"), 2),
+        "trade_status": packet.get("trade_status"),
         "edge": _format_change_pct(packet.get("expected_edge_pct")),
         "edge_risk": _format_float(packet.get("edge_risk"), 3),
         "confidence": _format_float(packet.get("confidence_score"), 1),
@@ -2748,6 +3061,13 @@ def _render_decision_packet_and_execution(
     p2.metric("Entry", _format_price(packet.get("entry")))
     p3.metric("TP1 / SL", f"{_format_price(packet.get('tp1'))} / {_format_price(packet.get('sl'))}")
     p4.metric("RR", _format_float(packet.get("rr"), 2))
+    p5, p6, p7 = st.columns(3)
+    p5.metric(_t("交易状态", "Trade Status"), str(packet.get("trade_status", "-")))
+    p6.metric(_t("距入场(%)", "Entry Gap (%)"), _format_change_pct(packet.get("entry_gap_pct")))
+    p7.metric(
+        _t("到价触发", "Entry Touched"),
+        _t("已触发", "Touched") if bool(packet.get("entry_touched", False)) else _t("未触发", "Not yet"),
+    )
     st.caption(
         f"config_hash={packet.get('config_hash','-')} | git={packet.get('git_commit','-')} | "
         f"cost={float(_safe_float(packet.get('cost_bps'))):.1f}bps | valid_until={packet.get('valid_until','-')} | "
@@ -4143,6 +4463,19 @@ def _prepare_tracking_table(
             "volatility_score",
             "policy_allow_short",
             "policy_reason",
+            "news_score_30m",
+            "news_score_120m",
+            "news_score_1440m",
+            "news_count_30m",
+            "news_burst_zscore",
+            "news_pos_neg_ratio",
+            "news_conflict_score",
+            "news_event_risk",
+            "news_gate_pass",
+            "news_risk_level",
+            "news_reason_codes",
+            "news_latest_headlines",
+            "news_latest_providers",
         ]
         snap_keep = [c for c in snap_keep if c in snap_df.columns]
         if {"market", "instrument_id"}.issubset(set(snap_keep)):
@@ -4164,6 +4497,19 @@ def _prepare_tracking_table(
                 "volatility_score",
                 "policy_allow_short",
                 "policy_reason",
+                "news_score_30m",
+                "news_score_120m",
+                "news_score_1440m",
+                "news_count_30m",
+                "news_burst_zscore",
+                "news_pos_neg_ratio",
+                "news_conflict_score",
+                "news_event_risk",
+                "news_gate_pass",
+                "news_risk_level",
+                "news_reason_codes",
+                "news_latest_headlines",
+                "news_latest_providers",
             ]
             for c in coalesce_cols:
                 sc = f"{c}_snap"
@@ -4191,6 +4537,21 @@ def _prepare_tracking_table(
     work["coverage_score"] = pd.to_numeric(work.get("coverage_score"), errors="coerce")
     work["factor_support_count"] = pd.to_numeric(work.get("factor_support_count"), errors="coerce").fillna(0.0)
     work["history_missing_rate"] = pd.to_numeric(work.get("history_missing_rate"), errors="coerce").fillna(0.0).clip(lower=0.0)
+    work["news_score_30m"] = pd.to_numeric(work.get("news_score_30m"), errors="coerce").fillna(0.0)
+    work["news_score_120m"] = pd.to_numeric(work.get("news_score_120m"), errors="coerce").fillna(0.0)
+    work["news_score_1440m"] = pd.to_numeric(work.get("news_score_1440m"), errors="coerce").fillna(0.0)
+    work["news_count_30m"] = pd.to_numeric(work.get("news_count_30m"), errors="coerce").fillna(0.0)
+    work["news_burst_zscore"] = pd.to_numeric(work.get("news_burst_zscore"), errors="coerce").fillna(0.0)
+    work["news_pos_neg_ratio"] = pd.to_numeric(work.get("news_pos_neg_ratio"), errors="coerce").fillna(1.0)
+    work["news_conflict_score"] = pd.to_numeric(work.get("news_conflict_score"), errors="coerce").fillna(0.0)
+    news_risk_series = work.get("news_risk_level", pd.Series(["low"] * len(work), index=work.index))
+    work["news_risk_level"] = news_risk_series.fillna("low").astype(str).str.lower()
+    news_reason_series = work.get("news_reason_codes", pd.Series([""] * len(work), index=work.index))
+    work["news_reason_codes"] = news_reason_series.fillna("").astype(str)
+    news_head_series = work.get("news_latest_headlines", pd.Series([""] * len(work), index=work.index))
+    work["news_latest_headlines"] = news_head_series.fillna("").astype(str)
+    news_provider_series = work.get("news_latest_providers", pd.Series([""] * len(work), index=work.index))
+    work["news_latest_providers"] = news_provider_series.fillna("").astype(str)
 
     pred_flag_raw = work.get("prediction_available", pd.Series([np.nan] * len(work), index=work.index))
     pred_flag = (
@@ -4200,8 +4561,16 @@ def _prepare_tracking_table(
     hard_flag_raw = work.get("hard_filter_pass", pd.Series([np.nan] * len(work), index=work.index))
     hard_flag = hard_flag_raw.astype(str).str.lower().map({"true": True, "false": False, "1": True, "0": False})
     hard_flag = hard_flag.fillna(True)
+    news_gate_raw = work.get("news_gate_pass", pd.Series([np.nan] * len(work), index=work.index))
+    news_gate_flag = news_gate_raw.astype(str).str.lower().map({"true": True, "false": False, "1": True, "0": False})
+    news_gate_flag = news_gate_flag.fillna(True)
+    news_event_raw = work.get("news_event_risk", pd.Series([np.nan] * len(work), index=work.index))
+    news_event_flag = news_event_raw.astype(str).str.lower().map({"true": True, "false": False, "1": True, "0": False})
+    news_event_flag = news_event_flag.fillna(False)
     work["prediction_available_flag"] = pred_flag.astype(bool)
     work["hard_filter_pass_flag"] = hard_flag.astype(bool)
+    work["news_gate_pass_flag"] = news_gate_flag.astype(bool)
+    work["news_event_risk_flag"] = news_event_flag.astype(bool)
 
     cost_pct = float(cost_bps) / 10000.0
     fallback_edge = work["predicted_change_pct"] - cost_pct
@@ -4267,17 +4636,35 @@ def _prepare_tracking_table(
         risk_v = str(r.get("risk_level", "high"))
         inputs_ok = bool(r.get("inputs_ready", False))
         hard_ok = bool(r.get("hard_filter_pass_flag", False))
+        news_ok = bool(r.get("news_gate_pass_flag", True))
+        news_event = bool(r.get("news_event_risk_flag", False))
+        news_risk = str(r.get("news_risk_level", "low")).lower()
         tags: List[str] = []
         tags.append("inputs_ready" if inputs_ok else "insufficient_inputs")
         tags.append("edge_ok" if np.isfinite(edge_v) and edge_v > 0 else _t("edge不足", "edge_low"))
         tags.append("confidence_ok" if np.isfinite(conf_v) and conf_v >= 70 else _t("confidence偏低", "confidence_low"))
         tags.append("risk_ok" if risk_v in {"low", "medium"} else _t("risk偏高", "risk_high"))
+        tags.append("news_ok" if news_ok else "news_block")
+        if news_event:
+            tags.append("news_event_risk")
+        if news_risk not in {"low", "medium"}:
+            tags.append("news_risk_high")
         if not hard_ok:
             tags.append("hard_filter_fail")
 
-        if inputs_ok and hard_ok and np.isfinite(conf_v) and conf_v >= 70 and np.isfinite(edge_v) and edge_v > 0 and risk_v in {"low", "medium"}:
+        if (
+            inputs_ok
+            and hard_ok
+            and news_ok
+            and np.isfinite(conf_v)
+            and conf_v >= 70
+            and np.isfinite(edge_v)
+            and edge_v > 0
+            and risk_v in {"low", "medium"}
+            and news_risk in {"low", "medium"}
+        ):
             return "可执行", " | ".join(tags)
-        if (not inputs_ok) or (not hard_ok) or (np.isfinite(conf_v) and conf_v < 40) or risk_v == "extreme":
+        if (not inputs_ok) or (not hard_ok) or (not news_ok) or news_event or (np.isfinite(conf_v) and conf_v < 40) or risk_v == "extreme":
             return "暂停", " | ".join(tags)
         return "观察", " | ".join(tags)
 
@@ -4424,6 +4811,8 @@ def _render_tracking_page(processed_dir: Path) -> None:
             risk_profile="standard",
             model_health=_model_health_from_conf(x.get("confidence_score")),
             event_risk=False,
+            persist_touch=True,
+            processed_dir=processed_dir,
         )
         return pd.Series(
             {
@@ -4433,6 +4822,14 @@ def _render_tracking_page(processed_dir: Path) -> None:
                 "plan_rr": plan.get("rr"),
                 "plan_action_text": plan.get("action_cn"),
                 "plan_action_reason": plan.get("action_reason"),
+                "plan_trade_status": plan.get("trade_status_text"),
+                "plan_trade_status_note": plan.get("trade_status_note"),
+                "plan_entry_gap_pct": plan.get("entry_gap_pct"),
+                "plan_entry_touched": plan.get("entry_touched"),
+                "plan_entry_touched_at": plan.get("entry_touched_at"),
+                "plan_price_source": plan.get("price_source"),
+                "plan_price_ts_market": plan.get("price_timestamp_market"),
+                "plan_price_ts_utc": plan.get("price_timestamp_utc"),
             }
         )
 
@@ -4751,6 +5148,25 @@ def _render_tracking_page(processed_dir: Path) -> None:
         p2.metric(_t("止损价", "Stop Loss"), _format_price(row.get("plan_stop_loss")))
         p3.metric(_t("止盈价", "Take Profit"), _format_price(row.get("plan_take_profit")))
         p4.metric(_t("盈亏比(RR)", "Risk/Reward (RR)"), _format_float(row.get("plan_rr"), 2))
+        p5, p6, p7, p8 = st.columns(4)
+        p5.metric(_t("交易状态", "Trade Status"), str(row.get("plan_trade_status", "-")))
+        p6.metric(_t("距入场(%)", "Entry Gap (%)"), _format_change_pct(row.get("plan_entry_gap_pct")))
+        p7.metric(
+            _t("到价触发", "Entry Touched"),
+            _t("已触发", "Touched") if bool(row.get("plan_entry_touched", False)) else _t("未触发", "Not yet"),
+        )
+        p8.metric(
+            _t("首次触发时间", "First Touch Time"),
+            str(row.get("plan_entry_touched_at", "-")) if str(row.get("plan_entry_touched_at", "")).strip() else "-",
+        )
+        if str(row.get("plan_trade_status_note", "")).strip():
+            st.caption(str(row.get("plan_trade_status_note", "-")))
+        st.caption(
+            _t(
+                f"价格源: {row.get('plan_price_source', '-')} | 市场时间: {row.get('plan_price_ts_market', '-')} | UTC: {row.get('plan_price_ts_utc', '-')}",
+                f"Price source: {row.get('plan_price_source', '-')} | Market ts: {row.get('plan_price_ts_market', '-')} | UTC: {row.get('plan_price_ts_utc', '-')}",
+            )
+        )
         st.caption(
             _t(
                 "说明：止损/止盈/RR 基于 q10/q50/q90 区间与成本口径自动计算，用于执行参考。",
@@ -4823,15 +5239,36 @@ def _render_tracking_page(processed_dir: Path) -> None:
                 "Integrated: EMA / MACD / SuperTrend / BOS / CHOCH / Volume-surge (when data is available).",
             )
         )
-        news_keys = [c for c in row.index if "news" in str(c).lower()]
-        if news_keys:
-            news_text = " | ".join(f"{k}={row.get(k)}" for k in news_keys if pd.notna(row.get(k)))
-            if news_text:
-                st.caption(_t(f"新闻因子：{news_text}", f"News factors: {news_text}"))
-            else:
-                st.caption(_t("新闻因子：当前无有效新闻信号。", "News factors: no valid news signal at this moment."))
+        news_gate_raw = str(row.get("news_gate_pass", row.get("news_gate_pass_flag", True))).strip().lower()
+        news_gate = news_gate_raw not in {"0", "false", "no", "n", "off"}
+        news_event_raw = str(row.get("news_event_risk", row.get("news_event_risk_flag", False))).strip().lower()
+        news_event = news_event_raw in {"1", "true", "yes", "y", "on"}
+        news_risk_level = _risk_text(str(row.get("news_risk_level", "low")))
+        news_score_30m = _safe_float(row.get("news_score_30m"))
+        news_score_2h = _safe_float(row.get("news_score_2h", row.get("news_score_120m")))
+        news_burst = _safe_float(row.get("news_burst_zscore"))
+        news_count_30m = _safe_float(row.get("news_count_30m"))
+        news_reason_codes = str(row.get("news_reason_codes", "")).strip()
+        if any(k in row.index for k in ["news_score_30m", "news_score_120m", "news_score_2h", "news_gate_pass"]):
+            st.caption(
+                _t(
+                    f"新闻门控：{'通过' if news_gate else '阻断'} | 新闻风险：{news_risk_level} | "
+                    f"2h情绪分：{_format_float(news_score_2h, 3)} | 30m情绪分：{_format_float(news_score_30m, 3)} | "
+                    f"30m条数：{_format_float(news_count_30m, 0)} | burst_z：{_format_float(news_burst, 2)} | "
+                    f"事件风险：{'是' if news_event else '否'}",
+                    f"News gate: {'PASS' if news_gate else 'BLOCK'} | News risk: {news_risk_level} | "
+                    f"2h score: {_format_float(news_score_2h, 3)} | 30m score: {_format_float(news_score_30m, 3)} | "
+                    f"30m count: {_format_float(news_count_30m, 0)} | burst_z: {_format_float(news_burst, 2)} | "
+                    f"event risk: {'yes' if news_event else 'no'}",
+                )
+            )
+            if news_reason_codes:
+                st.caption(_t(f"新闻原因码：{news_reason_codes}", f"News reason codes: {news_reason_codes}"))
+            headlines = str(row.get("news_latest_headlines", "")).strip()
+            if headlines:
+                st.caption(_t(f"最近新闻：{headlines}", f"Latest headlines: {headlines}"))
         else:
-            st.caption(_t("新闻因子：当前版本未接入实时新闻情绪流。", "News factors: real-time news sentiment is not integrated in this version."))
+            st.caption(_t("新闻因子：当前无有效新闻信号。", "News factors: no valid news signal at this moment."))
 
         st.caption(
             _t(
@@ -4858,6 +5295,41 @@ def _render_tracking_page(processed_dir: Path) -> None:
     action_view["止损价"] = action_view["plan_stop_loss"].map(_format_price)
     action_view["止盈价"] = action_view["plan_take_profit"].map(_format_price)
     action_view["盈亏比(RR)"] = action_view["plan_rr"].map(lambda x: _format_float(x, 2))
+    action_view["交易状态"] = action_view.get("plan_trade_status", pd.Series(["-"] * len(action_view), index=action_view.index)).astype(str)
+    action_view["距入场(%)"] = action_view.get("plan_entry_gap_pct", pd.Series([np.nan] * len(action_view), index=action_view.index)).map(_format_change_pct)
+    action_view["到价触发"] = action_view.get("plan_entry_touched", pd.Series([False] * len(action_view), index=action_view.index)).map(
+        lambda v: _t("已触发", "Touched") if bool(v) else _t("未触发", "Not yet")
+    )
+    action_view["首次触发时间"] = action_view.get("plan_entry_touched_at", pd.Series([""] * len(action_view), index=action_view.index)).map(
+        lambda v: str(v) if str(v).strip() else "-"
+    )
+    news_gate_series = action_view.get("news_gate_pass_flag")
+    if news_gate_series is None:
+        news_gate_series = action_view.get("news_gate")
+    if news_gate_series is None:
+        news_gate_series = pd.Series([True] * len(action_view), index=action_view.index)
+    action_view["新闻门控"] = news_gate_series.map(
+        lambda v: _t("通过", "PASS")
+        if str(v).strip().lower() in {"1", "true", "yes", "y", "on"}
+        else _t("阻断", "BLOCK")
+    )
+
+    news_risk_series = action_view.get("news_risk_level")
+    if news_risk_series is None:
+        news_risk_series = pd.Series(["low"] * len(action_view), index=action_view.index)
+    action_view["新闻风险"] = news_risk_series.map(_risk_text)
+
+    news_score_2h_series = action_view.get("news_score_120m")
+    if news_score_2h_series is None:
+        news_score_2h_series = action_view.get("news_score_2h")
+    if news_score_2h_series is None:
+        news_score_2h_series = pd.Series([np.nan] * len(action_view), index=action_view.index)
+    action_view["2h新闻情绪"] = news_score_2h_series.map(lambda x: _format_float(x, 3))
+
+    news_reason_series = action_view.get("news_reason_codes")
+    if news_reason_series is None:
+        news_reason_series = pd.Series([""] * len(action_view), index=action_view.index)
+    action_view["新闻原因码"] = news_reason_series.fillna("").astype(str)
     action_cols = [
         "市场",
         "display_name",
@@ -4867,9 +5339,17 @@ def _render_tracking_page(processed_dir: Path) -> None:
         "止损价",
         "止盈价",
         "盈亏比(RR)",
+        "交易状态",
+        "距入场(%)",
+        "到价触发",
+        "首次触发时间",
         "建议仓位",
         "预期净优势",
         "预计涨跌幅",
+        "新闻门控",
+        "新闻风险",
+        "2h新闻情绪",
+        "新闻原因码",
         "短原因",
         "状态触发标签",
         "告警标签",
@@ -4894,9 +5374,17 @@ def _render_tracking_page(processed_dir: Path) -> None:
                 "止损价": "stop_loss",
                 "止盈价": "take_profit",
                 "盈亏比(RR)": "rr",
+                "交易状态": "trade_status",
+                "距入场(%)": "entry_gap_pct",
+                "到价触发": "entry_touched",
+                "首次触发时间": "first_touch_time",
                 "建议仓位": "position_size",
                 "预期净优势": "expected_net_edge",
                 "预计涨跌幅": "pred_change_pct",
+                "新闻门控": "news_gate",
+                "新闻风险": "news_risk",
+                "2h新闻情绪": "news_score_2h",
+                "新闻原因码": "news_reason_codes",
                 "短原因": "short_reason",
                 "状态触发标签": "rule_tags",
                 "告警标签": "alerts",

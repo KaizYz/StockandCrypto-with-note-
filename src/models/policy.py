@@ -47,6 +47,19 @@ DEFAULT_POLICY_CONFIG: Dict[str, Any] = {
         "us_equity": {"allow_short": True},
         "default": {"allow_short": False},
     },
+    "news_gate": {
+        "enabled": True,
+        "negative_score_2h": -0.25,
+        "positive_score_2h": 0.25,
+        "burst_zscore": 1.5,
+        "score_30m_extreme": 0.40,
+        "count_30m_extreme": 3,
+        "risk_scale_by_level": {
+            "low": 1.0,
+            "medium": 0.85,
+            "high": 0.70,
+        },
+    },
 }
 
 
@@ -78,6 +91,29 @@ def _normalize_confidence_score(raw_value: float, confidence_power: float) -> fl
         val = val / 100.0
     val = float(np.clip(val, 0.0, 1.0))
     return float(np.power(val, max(confidence_power, 1e-9)))
+
+
+def _safe_bool(value: Any, default: bool = False) -> bool:
+    if isinstance(value, bool):
+        return value
+    text = str(value or "").strip().lower()
+    if text in {"1", "true", "yes", "y", "on"}:
+        return True
+    if text in {"0", "false", "no", "n", "off"}:
+        return False
+    return bool(default)
+
+
+def _parse_reason_codes(value: Any) -> list[str]:
+    text = str(value or "").strip()
+    if not text:
+        return []
+    out: list[str] = []
+    for token in text.split(";"):
+        t = str(token or "").strip()
+        if t and t not in out:
+            out.append(t)
+    return out
 
 
 def _infer_p_up_from_q50(q50_change_pct: float, ret_threshold: float) -> float:
@@ -194,6 +230,15 @@ def policy_from_forecast(
     market_type: str,
     policy_cfg: Dict[str, Any],
     risk_level: str = "",
+    news_score_30m: float = float("nan"),
+    news_score_2h: float = float("nan"),
+    news_score_24h: float = float("nan"),
+    news_burst_zscore: float = float("nan"),
+    news_count_30m: float = float("nan"),
+    news_event_risk: bool = False,
+    news_risk_level: str = "",
+    news_gate_pass: bool = True,
+    news_reason_codes: str = "",
 ) -> Dict[str, Any]:
     thresholds = policy_cfg.get("thresholds", {})
     execution = policy_cfg.get("execution", {})
@@ -250,6 +295,59 @@ def policy_from_forecast(
         risk_level=risk_level,
         policy_cfg=policy_cfg,
     )
+
+    news_cfg = policy_cfg.get("news_gate", {}) if isinstance(policy_cfg, dict) else {}
+    news_enabled = bool(news_cfg.get("enabled", True))
+    news_score_30m_v = _safe_float(news_score_30m)
+    news_score_2h_v = _safe_float(news_score_2h)
+    news_score_24h_v = _safe_float(news_score_24h)
+    news_burst_v = _safe_float(news_burst_zscore)
+    news_count_30m_v = _safe_float(news_count_30m)
+    news_event_risk_v = _safe_bool(news_event_risk, default=False)
+    news_risk_level_v = str(news_risk_level or "").lower().strip()
+    if news_risk_level_v not in {"low", "medium", "high"}:
+        news_risk_level_v = "high" if news_event_risk_v else "low"
+    news_reason_list = _parse_reason_codes(news_reason_codes)
+
+    neg_2h_thr = _safe_float(news_cfg.get("negative_score_2h", -0.25))
+    pos_2h_thr = _safe_float(news_cfg.get("positive_score_2h", 0.25))
+    burst_thr = _safe_float(news_cfg.get("burst_zscore", 1.5))
+    score_30_thr = _safe_float(news_cfg.get("score_30m_extreme", 0.40))
+    count_30_thr = _safe_float(news_cfg.get("count_30m_extreme", 3))
+    if not np.isfinite(neg_2h_thr):
+        neg_2h_thr = -0.25
+    if not np.isfinite(pos_2h_thr):
+        pos_2h_thr = 0.25
+    if not np.isfinite(burst_thr):
+        burst_thr = 1.5
+    if not np.isfinite(score_30_thr):
+        score_30_thr = 0.40
+    if not np.isfinite(count_30_thr):
+        count_30_thr = 3.0
+
+    if news_enabled:
+        local_event = False
+        if np.isfinite(news_score_30m_v) and np.isfinite(news_count_30m_v):
+            if abs(news_score_30m_v) >= score_30_thr and news_count_30m_v >= count_30_thr:
+                local_event = True
+                news_reason_list.append("NEWS_EVENT_EXTREME")
+        if np.isfinite(news_score_2h_v) and np.isfinite(news_burst_v):
+            if news_score_2h_v <= neg_2h_thr and news_burst_v >= burst_thr:
+                local_event = True
+                news_reason_list.append("NEG_BURST")
+            if news_score_2h_v >= pos_2h_thr and news_burst_v >= burst_thr:
+                local_event = True
+                news_reason_list.append("POS_BURST")
+        news_event_risk_v = bool(news_event_risk_v or local_event)
+        news_gate_pass_v = bool(_safe_bool(news_gate_pass, default=True) and (not news_event_risk_v))
+    else:
+        news_gate_pass_v = True
+
+    news_scale_cfg = news_cfg.get("risk_scale_by_level", {})
+    news_risk_scale = _safe_float(news_scale_cfg.get(news_risk_level_v, 1.0))
+    if not np.isfinite(news_risk_scale):
+        news_risk_scale = 1.0
+    risk_scale = float(np.clip(risk_scale * news_risk_scale, 0.0, 1.0))
     prob_strength = float(np.clip(2.0 * abs(p_up_used - 0.5), 0.0, 1.0))
     uncertainty_scale_factor = float(1.0 / (1.0 + uncertainty_scale * uncertainty_width))
 
@@ -276,6 +374,12 @@ def policy_from_forecast(
             reason = "probability_neutral"
     else:
         reason = "insufficient_inputs"
+
+    if news_enabled and (not news_gate_pass_v):
+        base_action = "Flat"
+        if "news_gate_block" not in news_reason_list:
+            news_reason_list.append("news_gate_block")
+        reason = "news_gate_block"
 
     position_size = prob_strength * uncertainty_scale_factor * risk_scale * confidence_used
     if not np.isfinite(position_size):
@@ -325,6 +429,16 @@ def policy_from_forecast(
         "policy_allow_short": bool(allow_short),
         "policy_reason": reason,
         "policy_p_up_source": p_up_source,
+        "news_gate_enabled": bool(news_enabled),
+        "news_gate_pass": bool(news_gate_pass_v),
+        "news_event_risk": bool(news_event_risk_v),
+        "news_risk_level": str(news_risk_level_v),
+        "news_score_30m": news_score_30m_v,
+        "news_score_2h": news_score_2h_v,
+        "news_score_24h": news_score_24h_v,
+        "news_burst_zscore": news_burst_v,
+        "news_count_30m": news_count_30m_v,
+        "news_reason_codes": ";".join(dict.fromkeys(news_reason_list)),
     }
 
 
@@ -342,6 +456,15 @@ def apply_policy_frame(
     confidence_col: str = "confidence_score",
     current_price_col: str = "current_price",
     risk_level_col: str = "risk_level",
+    news_score_30m_col: str = "news_score_30m",
+    news_score_2h_col: str = "news_score_120m",
+    news_score_24h_col: str = "news_score_1440m",
+    news_burst_col: str = "news_burst_zscore",
+    news_count_30m_col: str = "news_count_30m",
+    news_event_risk_col: str = "news_event_risk",
+    news_risk_level_col: str = "news_risk_level",
+    news_gate_pass_col: str = "news_gate_pass",
+    news_reason_codes_col: str = "news_reason_codes",
 ) -> pd.DataFrame:
     if df.empty:
         return df
@@ -362,6 +485,15 @@ def apply_policy_frame(
         conf = _safe_float(row.get(confidence_col))
         current = _safe_float(row.get(current_price_col))
         risk_level = str(row.get(risk_level_col, ""))
+        news_score_30m = _safe_float(row.get(news_score_30m_col))
+        news_score_2h = _safe_float(row.get(news_score_2h_col))
+        news_score_24h = _safe_float(row.get(news_score_24h_col))
+        news_burst = _safe_float(row.get(news_burst_col))
+        news_count_30m = _safe_float(row.get(news_count_30m_col))
+        news_event_risk = _safe_bool(row.get(news_event_risk_col), default=False)
+        news_risk_level = str(row.get(news_risk_level_col, ""))
+        news_gate_pass = _safe_bool(row.get(news_gate_pass_col), default=True)
+        news_reason_codes = str(row.get(news_reason_codes_col, ""))
 
         sig = policy_from_forecast(
             p_up=p_up,
@@ -375,8 +507,21 @@ def apply_policy_frame(
             market_type=market_type,
             policy_cfg=policy_cfg,
             risk_level=risk_level,
+            news_score_30m=news_score_30m,
+            news_score_2h=news_score_2h,
+            news_score_24h=news_score_24h,
+            news_burst_zscore=news_burst,
+            news_count_30m=news_count_30m,
+            news_event_risk=news_event_risk,
+            news_risk_level=news_risk_level,
+            news_gate_pass=news_gate_pass,
+            news_reason_codes=news_reason_codes,
         )
         for key, value in sig.items():
+            if key not in out.columns:
+                out[key] = np.nan
+            if isinstance(value, (str, bool, np.bool_)) and out[key].dtype != object:
+                out[key] = out[key].astype(object)
             out.at[idx, key] = value
 
     return out
@@ -410,4 +555,3 @@ def summarize_policy_actions(
     if "_all" in summary.columns:
         summary = summary.drop(columns=["_all"], errors="ignore")
     return summary
-

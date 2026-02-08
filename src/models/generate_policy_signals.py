@@ -7,6 +7,7 @@ from typing import Any, Dict
 import numpy as np
 import pandas as pd
 
+from src.features.news_features import merge_latest_news_features
 from src.models.policy import apply_policy_frame, summarize_policy_actions
 from src.utils.config import load_config
 from src.utils.io import save_json, write_csv
@@ -64,6 +65,23 @@ def _prepare_tracking_frame(df: pd.DataFrame, cfg: Dict[str, Any]) -> pd.DataFra
             ret_thr = 0.002
         scale = max(ret_thr, 1e-4) * 8.0
         out["p_up"] = 0.5 + 0.5 * np.tanh(pd.to_numeric(out["q50_change_pct"], errors="coerce").fillna(0.0) / scale)
+    # News defaults (when no real-time stream is available, keep neutral/no-block behavior).
+    news_defaults = {
+        "news_score_30m": 0.0,
+        "news_score_120m": 0.0,
+        "news_score_1440m": 0.0,
+        "news_count_30m": 0.0,
+        "news_burst_zscore": 0.0,
+        "news_pos_neg_ratio": 1.0,
+        "news_conflict_score": 0.0,
+        "news_event_risk": 0.0,
+        "news_gate_pass": 1.0,
+        "news_risk_level": "low",
+        "news_reason_codes": "",
+    }
+    for col, default in news_defaults.items():
+        if col not in out.columns:
+            out[col] = default
     return out
 
 
@@ -82,6 +100,13 @@ def run_generate_policy_signals(config_path: str) -> None:
         hourly["market"] = "crypto"
         if "market_type" not in hourly.columns:
             hourly["market_type"] = "perp"
+        hourly = merge_latest_news_features(
+            hourly,
+            market_col="market",
+            symbol_col="symbol",
+            processed_dir=str(processed_dir),
+        )
+        hourly = _prepare_tracking_frame(hourly, cfg)
         hourly_sig = apply_policy_frame(
             hourly,
             cfg,
@@ -113,6 +138,13 @@ def run_generate_policy_signals(config_path: str) -> None:
         daily["market"] = "crypto"
         if "market_type" not in daily.columns:
             daily["market_type"] = "perp"
+        daily = merge_latest_news_features(
+            daily,
+            market_col="market",
+            symbol_col="symbol",
+            processed_dir=str(processed_dir),
+        )
+        daily = _prepare_tracking_frame(daily, cfg)
         daily_sig = apply_policy_frame(
             daily,
             cfg,
@@ -141,6 +173,13 @@ def run_generate_policy_signals(config_path: str) -> None:
     tracking_snapshot = _load_csv_optional(tracking_snapshot_path)
     if not tracking_snapshot.empty:
         tracking_for_policy = _prepare_tracking_frame(tracking_snapshot, cfg)
+        tracking_for_policy = merge_latest_news_features(
+            tracking_for_policy,
+            market_col="market",
+            symbol_col="symbol",
+            processed_dir=str(processed_dir),
+        )
+        tracking_for_policy = _prepare_tracking_frame(tracking_for_policy, cfg)
         tracking_sig = apply_policy_frame(
             tracking_for_policy,
             cfg,
@@ -183,4 +222,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

@@ -7,6 +7,8 @@ from typing import Dict, Iterable, List
 import numpy as np
 import pandas as pd
 
+from src.features.news_features import merge_news_features_asof
+from src.ingestion.symbol_mapper import canonical_symbol, normalize_market
 from src.utils.config import load_config
 from src.utils.io import ensure_dir, write_csv
 
@@ -144,11 +146,13 @@ def run_build_features(config_path: str) -> None:
     cfg = load_config(config_path)
     paths = cfg.get("paths", {})
     data_cfg = cfg.get("data", {})
-    feature_cfg = cfg.get("features", {})
+    news_cfg = cfg.get("news", {}) if isinstance(cfg, dict) else {}
 
     raw_dir = Path(paths.get("raw_data_dir", "data/raw"))
     out_dir = ensure_dir(paths.get("processed_data_dir", "data/processed"))
     symbol = data_cfg.get("symbol", "BTCUSDT").lower()
+    symbol_canon = canonical_symbol(symbol, "crypto")
+    market_default = normalize_market(data_cfg.get("market", "crypto"))
     branches = data_cfg.get("branches", {})
 
     for branch_name, branch_cfg in branches.items():
@@ -163,6 +167,38 @@ def run_build_features(config_path: str) -> None:
             if c in df.columns:
                 df[c] = pd.to_numeric(df[c], errors="coerce")
         feat_df = _build_single_branch_features(df, branch_cfg=branch_cfg, global_cfg=cfg)
+        # Merge news features with no-leakage via backward asof on available_at_utc-derived grid.
+        if bool(news_cfg.get("enabled", True)):
+            feat_df["market"] = market_default
+            feat_df["symbol"] = symbol_canon
+            try:
+                feat_df = merge_news_features_asof(
+                    feat_df,
+                    ts_col="timestamp_utc",
+                    market_col="market",
+                    symbol_col="symbol",
+                    processed_dir=str(out_dir),
+                )
+            except Exception as exc:
+                print(f"[WARN] merge_news_features_asof failed for {branch_name}: {exc}")
+            default_news_values = {
+                "news_score_30m": 0.0,
+                "news_score_120m": 0.0,
+                "news_score_1440m": 0.0,
+                "news_count_30m": 0.0,
+                "news_count_120m": 0.0,
+                "news_count_1440m": 0.0,
+                "news_burst_zscore": 0.0,
+                "news_pos_neg_ratio": 1.0,
+                "news_conflict_score": 0.0,
+                "news_event_risk": 0.0,
+                "news_gate_pass": 1.0,
+            }
+            for col, default_value in default_news_values.items():
+                if col in feat_df.columns:
+                    feat_df[col] = pd.to_numeric(feat_df[col], errors="coerce").fillna(default_value)
+            if "news_risk_level" in feat_df.columns:
+                feat_df["news_risk_level"] = feat_df["news_risk_level"].fillna("low")
         out_path = out_dir / f"features_{branch_name}.csv"
         write_csv(feat_df, out_path)
         print(f"[OK] Saved features -> {out_path}")

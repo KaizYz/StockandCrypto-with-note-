@@ -177,6 +177,17 @@ policy:
       allow_short: false
     us_equity:
       allow_short: true
+  news_gate:
+    enabled: true
+    negative_score_2h: -0.25
+    positive_score_2h: 0.25
+    burst_zscore: 1.5
+    score_30m_extreme: 0.40
+    count_30m_extreme: 3
+    risk_scale_by_level:
+      low: 1.0
+      medium: 0.85
+      high: 0.70
 
 market_snapshot:
   enabled: true
@@ -246,6 +257,69 @@ tracking:
   action_rules:
     min_predicted_change_pct: 0.0
     min_factor_support_count: 2
+
+news:
+  enabled: true
+  markets: ["crypto", "us_equity", "cn_equity"]
+  providers:
+    - "alpha_vantage"
+    - "newsapi"
+    - "gdelt"
+    - "finnhub"
+    - "marketaux"
+    - "bybit_announcements"
+    - "binance_rss"
+    - "sec_atom"
+  output_dir: "data/processed/news"
+  raw_output_csv: "data/processed/news/news_raw.csv"
+  raw_output_parquet: "data/processed/news/news_raw.parquet"
+  status_output_json: "data/processed/news/news_ingestion_status.json"
+  status_output_csv: "data/processed/news/news_ingestion_status.csv"
+  features_output_csv: "data/processed/news/news_features_hourly.csv"
+  features_output_parquet: "data/processed/news/news_features_hourly.parquet"
+  latest_output_csv: "data/processed/news/news_features_latest.csv"
+  latest_output_json: "data/processed/news/news_features_latest.json"
+  timeout_sec: 15
+  max_retries: 2
+  backoff_sec: 1.2
+  provider_limit_per_symbol: 20
+  retention_days: 45
+  max_rows_total: 200000
+  dedup_simhash_distance: 3
+  max_symbols_per_market:
+    crypto: 20
+    us_equity: 20
+    cn_equity: 20
+  source_tier_by_provider:
+    alpha_vantage: "tier1"
+    newsapi: "tier2"
+    gdelt: "tier3"
+    finnhub: "tier1"
+    marketaux: "tier2"
+    bybit_announcements: "tier1"
+    binance_rss: "tier1"
+    sec_atom: "tier1"
+  source_tier_weights:
+    tier1: 1.0
+    tier2: 0.7
+    tier3: 0.4
+  api_keys:
+    alpha_vantage: "ALPHA_VANTAGE_API_KEY"
+    newsapi: "NEWSAPI_API_KEY"
+    finnhub: "FINNHUB_API_KEY"
+    marketaux: "MARKETAUX_API_KEY"
+  rss_feeds:
+    - "https://www.binance.com/en/support/announcement/rss"
+  feature_windows_minutes: [30, 120, 1440]
+  decay_tau_minutes: 360
+  grid_lookback_days: 30
+  gate:
+    enabled: true
+    negative_score_2h: -0.25
+    positive_score_2h: 0.25
+    burst_zscore: 1.5
+    score_30m_extreme: 0.40
+    count_30m_extreme: 3
 
 forecast_config:
   trend_labels:

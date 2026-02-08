@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 import requests
 
+from src.features.news_features import merge_latest_news_features
 from src.ingestion.update_data import fetch_binance_klines
 from src.models.policy import apply_policy_frame
 from src.utils.config import load_config
@@ -899,6 +900,41 @@ def build_session_forecast_bundle(
     hourly["market"] = "crypto"
     blocks["market"] = "crypto"
     daily["market"] = "crypto"
+    hourly = merge_latest_news_features(
+        hourly,
+        market_col="market",
+        symbol_col="symbol",
+        processed_dir=str(processed_dir),
+    )
+    blocks = merge_latest_news_features(
+        blocks,
+        market_col="market",
+        symbol_col="symbol",
+        processed_dir=str(processed_dir),
+    )
+    daily = merge_latest_news_features(
+        daily,
+        market_col="market",
+        symbol_col="symbol",
+        processed_dir=str(processed_dir),
+    )
+    news_defaults = {
+        "news_score_30m": 0.0,
+        "news_score_120m": 0.0,
+        "news_score_1440m": 0.0,
+        "news_count_30m": 0.0,
+        "news_burst_zscore": 0.0,
+        "news_pos_neg_ratio": 1.0,
+        "news_conflict_score": 0.0,
+        "news_event_risk": 0.0,
+        "news_gate_pass": 1.0,
+        "news_risk_level": "low",
+        "news_reason_codes": "",
+    }
+    for frame in [hourly, blocks, daily]:
+        for col, default in news_defaults.items():
+            if col not in frame.columns:
+                frame[col] = default
     hourly = apply_policy_frame(
         hourly,
         cfg,
@@ -954,6 +990,15 @@ def build_session_forecast_bundle(
         "policy_uncertainty_width",
         "policy_p_up_used",
         "policy_p_up_source",
+        "news_gate_pass",
+        "news_event_risk",
+        "news_risk_level",
+        "news_score_30m",
+        "news_score_2h",
+        "news_score_24h",
+        "news_burst_zscore",
+        "news_count_30m",
+        "news_reason_codes",
     ]
 
     hourly_cols = [

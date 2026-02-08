@@ -5,6 +5,8 @@
 $ErrorActionPreference = "Stop"
 
 python -m src.ingestion.update_data --config $Config
+python -m src.ingestion.news_sentiment --config $Config
+python -m src.features.news_features --config $Config
 python -m src.preprocessing.validate_data --config $Config
 python -m src.features.build_features --config $Config
 python -m src.labels.build_labels --config $Config

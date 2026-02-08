@@ -239,6 +239,27 @@ def build_decision_packet(
     tp1 = _safe_float(trade_plan.get("take_profit", row.get("predicted_price")))
     tp2 = _safe_float(trade_plan.get("take_profit_2"))
     rr = _safe_float(trade_plan.get("rr"))
+    entry_band_pct = _safe_float(trade_plan.get("entry_band_pct"))
+    entry_gap_pct = _safe_float(trade_plan.get("entry_gap_pct"))
+    entry_touched = bool(trade_plan.get("entry_touched", False))
+    entry_touched_at = _safe_text(trade_plan.get("entry_touched_at"))
+    trade_status = _safe_text(trade_plan.get("trade_status"))
+    trade_status_text = _safe_text(trade_plan.get("trade_status_text"))
+    trade_status_note = _safe_text(trade_plan.get("trade_status_note"))
+    signal_time_utc = _safe_text(trade_plan.get("signal_time_utc", row.get("generated_at_utc", row.get("timestamp_utc"))))
+    price_source = _safe_text(trade_plan.get("price_source", row.get("price_source")))
+    price_timestamp_market = _safe_text(
+        trade_plan.get(
+            "price_timestamp_market",
+            row.get("price_timestamp_market", row.get("timestamp_market", row.get("latest_market"))),
+        )
+    )
+    price_timestamp_utc = _safe_text(
+        trade_plan.get(
+            "price_timestamp_utc",
+            row.get("price_timestamp_utc", row.get("timestamp_utc", row.get("latest_utc"))),
+        )
+    )
     p_up = _safe_float(trade_plan.get("p_up", row.get("p_up")))
     p_down = _safe_float(trade_plan.get("p_down", row.get("p_down")))
     q10 = _safe_float(trade_plan.get("q10", row.get("q10_change_pct")))
@@ -271,10 +292,33 @@ def build_decision_packet(
     generated_market = _safe_text(row.get("generated_at_market"))
     if not generated_market:
         generated_market = _safe_text(row.get("generated_at_utc")) or generated_utc
-    valid_until = exp_market if exp_market else exp_utc
+    valid_until = _safe_text(trade_plan.get("valid_until")) or (exp_market if exp_market else exp_utc)
 
     decision_id = str(uuid.uuid4())
     gate_fields = _derive_gate_fields(action=action, reasons=reasons, trade_plan=trade_plan, row=row)
+
+    news_reason_raw = _safe_text(trade_plan.get("news_reason_codes", row.get("news_reason_codes", "")))
+    news_gate_raw = _safe_text(row.get("news_gate_pass", "true")).lower()
+    news_gate_pass = news_gate_raw in {"1", "true", "yes", "y", "on"}
+    if news_gate_raw in {"0", "false", "no", "n", "off"}:
+        news_gate_pass = False
+    news_event_raw = _safe_text(row.get("news_event_risk", "false")).lower()
+    news_event_risk = news_event_raw in {"1", "true", "yes", "y", "on"}
+    news_reason_codes = [x.strip() for x in news_reason_raw.split(";") if x.strip()]
+    news_payload = {
+        "gate_pass": bool(news_gate_pass),
+        "risk_level": _safe_text(row.get("news_risk_level", "low")) or "low",
+        "event_risk": bool(news_event_risk),
+        "score_30m": _safe_float(row.get("news_score_30m")),
+        "score_2h": _safe_float(row.get("news_score_2h", row.get("news_score_120m"))),
+        "score_24h": _safe_float(row.get("news_score_24h", row.get("news_score_1440m"))),
+        "count_30m": _safe_int(row.get("news_count_30m"), default=0),
+        "burst_zscore": _safe_float(row.get("news_burst_zscore")),
+        "reason_codes": news_reason_codes,
+        "top_headlines": _safe_text(row.get("news_latest_headlines", "")).split(" || ")
+        if _safe_text(row.get("news_latest_headlines", ""))
+        else [],
+    }
     packet = {
         "decision_id": decision_id,
         "market": market,
@@ -292,6 +336,13 @@ def build_decision_packet(
         "tp1": tp1,
         "tp2": tp2,
         "rr": rr,
+        "entry_band_pct": entry_band_pct,
+        "entry_gap_pct": entry_gap_pct,
+        "entry_touched": bool(entry_touched),
+        "entry_touched_at": entry_touched_at,
+        "trade_status": trade_status,
+        "trade_status_text": trade_status_text,
+        "trade_status_note": trade_status_note,
         "p_up": p_up,
         "p_down": p_down,
         "q10_change_pct": q10,
@@ -314,6 +365,10 @@ def build_decision_packet(
             f"+ impact={impact_bps:.2f}bps; delay_bars={delay_bars}; fill={fill_price_mode}; profile={cost_profile}"
         ),
         "valid_until": valid_until,
+        "signal_time_utc": signal_time_utc,
+        "price_source": price_source,
+        "price_timestamp_market": price_timestamp_market,
+        "price_timestamp_utc": price_timestamp_utc,
         "generated_at_market_tz": generated_market,
         "generated_at_utc": generated_utc,
         "model_version": _safe_text(row.get("prediction_method", "baseline_momentum_quantile")),
@@ -325,6 +380,11 @@ def build_decision_packet(
         "blocked_reason": gate_fields["blocked_reason"],
         "health_grade": gate_fields["health_grade"],
         "risk_budget_left": gate_fields["risk_budget_left"],
+        "news_gate_pass": news_payload["gate_pass"],
+        "news_risk_level": news_payload["risk_level"],
+        "news_event_risk": news_payload["event_risk"],
+        "news_reason_codes": ";".join(news_reason_codes),
+        "news": news_payload,
         "notes": _safe_text(trade_plan.get("action_reason", "")),
         "policy_position_size": _safe_float(row.get("policy_position_size", trade_plan.get("policy_position_size"))),
         "kill_switch_enabled": bool(ks_cfg.get("enabled", True)),

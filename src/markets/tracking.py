@@ -8,6 +8,7 @@ from typing import Any, Dict, List
 import numpy as np
 import pandas as pd
 
+from src.features.news_features import merge_latest_news_features
 from src.markets.snapshot import build_market_snapshot_from_instruments
 from src.markets.universe import get_universe_catalog, load_universe
 from src.models.policy import apply_policy_frame
@@ -373,6 +374,28 @@ def run_tracking(config_path: str) -> None:
     snapshot = _build_snapshot_parallel(instruments, config_path=config_path, max_workers=workers)
     merged = meta.merge(snapshot, how="left", on="instrument_id", suffixes=("", "_snap"))
     scored = _score_and_state(merged, cfg)
+    scored = merge_latest_news_features(
+        scored,
+        market_col="market",
+        symbol_col="symbol",
+        processed_dir=str(processed_dir),
+    )
+    news_defaults = {
+        "news_score_30m": 0.0,
+        "news_score_120m": 0.0,
+        "news_score_1440m": 0.0,
+        "news_count_30m": 0.0,
+        "news_burst_zscore": 0.0,
+        "news_pos_neg_ratio": 1.0,
+        "news_conflict_score": 0.0,
+        "news_event_risk": 0.0,
+        "news_gate_pass": 1.0,
+        "news_risk_level": "low",
+        "news_reason_codes": "",
+    }
+    for col, default in news_defaults.items():
+        if col not in scored.columns:
+            scored[col] = default
 
     # Policy layer for unified buy/sell/flat outputs across markets.
     scored = scored.copy()
@@ -474,6 +497,15 @@ def run_tracking(config_path: str) -> None:
         "coverage_score",
         "factor_support_count",
         "price_source",
+        "news_score_30m",
+        "news_score_120m",
+        "news_score_1440m",
+        "news_count_30m",
+        "news_burst_zscore",
+        "news_risk_level",
+        "news_event_risk",
+        "news_gate_pass",
+        "news_reason_codes",
     ]
 
     coverage_df = scored[[c for c in coverage_cols if c in scored.columns]].copy()
@@ -495,6 +527,15 @@ def run_tracking(config_path: str) -> None:
             "policy_expected_edge_pct",
             "policy_expected_edge_abs",
             "policy_reason",
+            "news_score_30m",
+            "news_score_120m",
+            "news_score_1440m",
+            "news_count_30m",
+            "news_burst_zscore",
+            "news_risk_level",
+            "news_event_risk",
+            "news_gate_pass",
+            "news_reason_codes",
             "factor_support_count",
             "hard_filter_pass",
         ]
