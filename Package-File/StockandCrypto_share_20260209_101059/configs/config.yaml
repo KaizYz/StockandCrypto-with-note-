@@ -16,7 +16,7 @@ data:
   branches:
     hourly:
       interval: "1h"
-      lookback_days: 1825
+      lookback_days: 420
       market_tz: "Asia/Shanghai"
       horizons: [1, 2, 4]
       lag_returns: [1, 2, 4, 12, 24]
@@ -26,7 +26,7 @@ data:
       time_features: "hourly"
     daily:
       interval: "1d"
-      lookback_days: 1825
+      lookback_days: 2200
       market_tz: "Asia/Shanghai"
       horizons: [1, 3, 7]
       lag_returns: [1, 3, 7, 14]
@@ -99,9 +99,9 @@ backtest:
 backtest_multi_market:
   enabled: true
   lookback_days:
-    crypto: 1825
-    cn_equity: 1825
-    us_equity: 1825
+    crypto: 540
+    cn_equity: 1200
+    us_equity: 1200
   min_train_size: 180
   test_size: 60
   max_folds: 4
@@ -202,7 +202,7 @@ market_snapshot:
       timezone: "Asia/Shanghai"
       horizon_unit: "hour"
       horizon_steps: 4
-      history_lookback_days: 1825
+      history_lookback_days: 365
     - id: "aapl"
       name: "AAPL"
       market: "us_equity"
@@ -211,7 +211,7 @@ market_snapshot:
       timezone: "America/New_York"
       horizon_unit: "day"
       horizon_steps: 3
-      history_lookback_days: 1825
+      history_lookback_days: 730
     - id: "moutai"
       name: "贵州茅台"
       market: "cn_equity"
@@ -220,7 +220,7 @@ market_snapshot:
       timezone: "Asia/Shanghai"
       horizon_unit: "day"
       horizon_steps: 3
-      history_lookback_days: 1825
+      history_lookback_days: 730
 
 tracking:
   enabled: true
@@ -239,17 +239,17 @@ tracking:
       timezone: "Asia/Shanghai"
       horizon_unit: "hour"
       horizon_steps: 4
-      history_lookback_days: 1825
+      history_lookback_days: 365
     cn_equity:
       timezone: "Asia/Shanghai"
       horizon_unit: "day"
       horizon_steps: 3
-      history_lookback_days: 1825
+      history_lookback_days: 730
     us_equity:
       timezone: "America/New_York"
       horizon_unit: "day"
       horizon_steps: 3
-      history_lookback_days: 1825
+      history_lookback_days: 730
   hard_filters:
     min_history_bars: 180
     max_missing_rate: 0.05
@@ -415,45 +415,6 @@ monitoring:
 
 decision:
   confidence_min: 60.0
-  entry_band_pct:
-    crypto: 0.0015
-    cn_equity: 0.0010
-    us_equity: 0.0010
-    default: 0.0012
-  consistency:
-    enabled: true
-    ewma_span_bars: 4
-    delta_p_threshold: 0.05
-    delta_edge_bps_threshold: 4.0
-    cooldown_bars: 1
-    min_hold_bars: 1
-    hysteresis:
-      p_bull_exit: 0.52
-      p_bear_exit: 0.48
-
-training:
-  lookback_days: 1825
-  fallback_min_days: 1095
-  freeze_test_months: 6
-  retrain_schedule: "weekly"
-  publish_mode: "frozen_version"
-
-data_quality:
-  max_missing_rate: 0.05
-  outlier_detection:
-    enabled: true
-    return_abs_quantile: 0.999
-    action: "downweight"
-
-split:
-  method: "purged_walk_forward"
-  gap_bars: "auto"
-  n_splits_intraday: 6
-  n_splits_daily: 5
-
-gate:
-  min_history_days: 1825
-  allow_fallback_3y: true
 
 kill_switch:
   enabled: true

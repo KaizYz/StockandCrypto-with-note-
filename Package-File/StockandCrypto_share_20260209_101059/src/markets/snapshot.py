@@ -575,7 +575,7 @@ def _build_snapshot_rows(instruments: List[Dict[str, Any]], cfg: Dict[str, Any])
         timezone = str(inst.get("timezone", "UTC"))
         horizon_unit = str(inst.get("horizon_unit", "day"))
         horizon_steps = int(inst.get("horizon_steps", 1))
-        lookback_days = int(inst.get("history_lookback_days", 1825))
+        lookback_days = int(inst.get("history_lookback_days", 365))
         horizon_label = f"{horizon_steps}{'h' if horizon_unit == 'hour' else 'd'}"
 
         try:

@@ -33,19 +33,19 @@ DEFAULT_MARKET_DEFAULTS: Dict[str, Dict[str, Any]] = {
         "timezone": "Asia/Shanghai",
         "horizon_unit": "hour",
         "horizon_steps": 4,
-        "history_lookback_days": 1825,
+        "history_lookback_days": 365,
     },
     "cn_equity": {
         "timezone": "Asia/Shanghai",
         "horizon_unit": "day",
         "horizon_steps": 3,
-        "history_lookback_days": 1825,
+        "history_lookback_days": 730,
     },
     "us_equity": {
         "timezone": "America/New_York",
         "horizon_unit": "day",
         "horizon_steps": 3,
-        "history_lookback_days": 1825,
+        "history_lookback_days": 730,
     },
 }
 
@@ -136,7 +136,7 @@ def _build_snapshot_instruments(meta: pd.DataFrame, cfg: Dict[str, Any]) -> List
         timezone = str(defaults.get("timezone", "UTC"))
         horizon_unit = str(defaults.get("horizon_unit", "day"))
         horizon_steps = int(defaults.get("horizon_steps", 1))
-        lookback = int(defaults.get("history_lookback_days", 1825))
+        lookback = int(defaults.get("history_lookback_days", 365))
         instruments.append(
             {
                 "id": str(row["instrument_id"]),

@@ -123,12 +123,12 @@ def _load_symbol_signal_context_cached(
     bt_cfg = cfg.get("backtest_multi_market", {})
     lookback_days_cfg = bt_cfg.get(
         "lookback_days",
-        {"crypto": 1825, "cn_equity": 1825, "us_equity": 1825},
+        {"crypto": 540, "cn_equity": 1200, "us_equity": 1200},
     )
     mk = str(market)
     sym = str(symbol)
     prov = str(provider or ("binance" if mk == "crypto" else "yahoo"))
-    lb_days = int(lookback_days_cfg.get(mk, 1825))
+    lb_days = int(lookback_days_cfg.get(mk, 720))
     try:
         bars, _ = _fetch_daily_bars(
             market=mk,
@@ -213,14 +213,6 @@ def _reason_token_cn(token: object) -> str:
         "market:short_disallowed": "该市场当前不支持做空",
         "signal:expired": "信号已过期",
         "price:data_unavailable": "价格/数据不可用",
-        "consistency:new_bar_close": "新K线收盘触发重算",
-        "consistency:signal_key_changed": "信号快照更新触发重算",
-        "consistency:delta_p_trigger": "方向概率变化跨阈值触发",
-        "consistency:delta_edge_trigger": "净优势变化跨阈值触发",
-        "consistency:news_risk_trigger": "新闻风险状态变化触发",
-        "consistency:no_trigger_hold": "未触发重算条件，沿用上一信号",
-        "consistency:cooldown_active": "冷却期内，保持上一动作",
-        "consistency:min_hold_active": "最小持有期内，保持上一动作",
     }
     return mapping.get(key, str(token or "-"))
 
@@ -268,14 +260,6 @@ def _reason_token_en(token: object) -> str:
         "market:short_disallowed": "Shorting not allowed in this market",
         "signal:expired": "Signal expired",
         "price:data_unavailable": "Price/data unavailable",
-        "consistency:new_bar_close": "Recomputed on new bar close",
-        "consistency:signal_key_changed": "Recomputed on snapshot refresh",
-        "consistency:delta_p_trigger": "Recomputed on probability delta threshold",
-        "consistency:delta_edge_trigger": "Recomputed on edge delta threshold",
-        "consistency:news_risk_trigger": "Recomputed on news-risk state change",
-        "consistency:no_trigger_hold": "No recompute trigger; keep previous signal",
-        "consistency:cooldown_active": "Cooldown active; keep previous action",
-        "consistency:min_hold_active": "Minimum-hold active; keep previous action",
     }
     return mapping.get(key, str(token or "-"))
 
@@ -2191,12 +2175,12 @@ def _compute_recent_symbol_reliability_cached(
     bt_cfg = cfg.get("backtest_multi_market", {})
     lookback_days_cfg = bt_cfg.get(
         "lookback_days",
-        {"crypto": 1825, "cn_equity": 1825, "us_equity": 1825},
+        {"crypto": 540, "cn_equity": 1200, "us_equity": 1200},
     )
     mk = str(market)
     sym = str(symbol)
     prov = str(provider or ("binance" if mk == "crypto" else "yahoo"))
-    lb_days = int(lookback_days_cfg.get(mk, 1825))
+    lb_days = int(lookback_days_cfg.get(mk, 720))
 
     try:
         bars, _ = _fetch_daily_bars(
@@ -2352,7 +2336,9 @@ def _parse_horizon_label(label: str) -> Tuple[str, int]:
 
 
 def _default_lookback_days(market: str) -> int:
-    return 1825
+    if market == "crypto":
+        return 365
+    return 730
 
 
 def _build_snapshot_fresh(inst: list[dict[str, object]]) -> pd.DataFrame:
@@ -5590,55 +5576,6 @@ def _save_entry_touch_state(state: Dict[str, Dict[str, object]], processed_dir: 
     path.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def _consistency_state_path(processed_dir: Path | None = None) -> Path:
-    root = processed_dir or Path("data/processed")
-    out = root / "execution"
-    out.mkdir(parents=True, exist_ok=True)
-    return out / "signal_consistency_state.json"
-
-
-def _load_consistency_state(processed_dir: Path | None = None) -> Dict[str, Dict[str, object]]:
-    path = _consistency_state_path(processed_dir)
-    if not path.exists():
-        return {}
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        return {}
-    if not isinstance(payload, dict):
-        return {}
-    out: Dict[str, Dict[str, object]] = {}
-    for key, value in payload.items():
-        if isinstance(value, dict):
-            out[str(key)] = value
-    return out
-
-
-def _save_consistency_state(state: Dict[str, Dict[str, object]], processed_dir: Path | None = None) -> None:
-    path = _consistency_state_path(processed_dir)
-    if len(state) > 5000:
-        items = sorted(
-            state.items(),
-            key=lambda kv: str(kv[1].get("updated_at_utc", "")),
-            reverse=True,
-        )[:5000]
-        state = dict(items)
-    path.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
-
-
-def _signal_change_log_path(processed_dir: Path | None = None) -> Path:
-    root = processed_dir or Path("data/processed")
-    out = root / "execution"
-    out.mkdir(parents=True, exist_ok=True)
-    return out / "signal_change_log.csv"
-
-
-def _append_signal_change_log(record: Dict[str, object], processed_dir: Path | None = None) -> None:
-    path = _signal_change_log_path(processed_dir)
-    row = pd.DataFrame([record])
-    row.to_csv(path, mode="a", index=False, header=not path.exists(), encoding="utf-8-sig")
-
-
 def _default_entry_band_pct(market: str) -> float:
     mk = str(market or "").strip().lower()
     if mk == "crypto":
@@ -5752,33 +5689,9 @@ def _build_trade_decision_plan(
     policy_cfg = (cfg_local.get("policy", {}) if isinstance(cfg_local, dict) else {})
     th_cfg = policy_cfg.get("thresholds", {})
     ex_cfg = policy_cfg.get("execution", {})
-    decision_cfg = (cfg_local.get("decision", {}) if isinstance(cfg_local, dict) else {})
-    consistency_cfg = (
-        decision_cfg.get("consistency", {}) if isinstance(decision_cfg, dict) else {}
-    )
     p_bull = float(th_cfg.get("p_bull", 0.55))
     p_bear = float(th_cfg.get("p_bear", 0.45))
-    conf_min = float(decision_cfg.get("confidence_min", 60.0))
-    consistency_enabled = bool(consistency_cfg.get("enabled", True))
-    ewma_span = int(_safe_float(consistency_cfg.get("ewma_span_bars", 4)))
-    if ewma_span < 1:
-        ewma_span = 1
-    ewma_alpha = float(np.clip(2.0 / (ewma_span + 1.0), 0.01, 1.0))
-    delta_p_threshold = float(max(0.0, _safe_float(consistency_cfg.get("delta_p_threshold", 0.05))))
-    delta_edge_bps_threshold = float(max(0.0, _safe_float(consistency_cfg.get("delta_edge_bps_threshold", 4.0))))
-    cooldown_bars = int(max(0.0, _safe_float(consistency_cfg.get("cooldown_bars", 1))))
-    min_hold_bars = int(max(0.0, _safe_float(consistency_cfg.get("min_hold_bars", 1))))
-    hysteresis_cfg = (
-        consistency_cfg.get("hysteresis", {}) if isinstance(consistency_cfg, dict) else {}
-    )
-    p_bull_exit = _safe_float(hysteresis_cfg.get("p_bull_exit", p_bull - 0.04))
-    p_bear_exit = _safe_float(hysteresis_cfg.get("p_bear_exit", p_bear + 0.04))
-    if not np.isfinite(p_bull_exit):
-        p_bull_exit = p_bull - 0.04
-    if not np.isfinite(p_bear_exit):
-        p_bear_exit = p_bear + 0.04
-    p_bull_exit = float(np.clip(min(p_bull_exit, p_bull), 0.0, 1.0))
-    p_bear_exit = float(np.clip(max(p_bear_exit, p_bear), 0.0, 1.0))
+    conf_min = float((cfg_local.get("decision", {}) if isinstance(cfg_local, dict) else {}).get("confidence_min", 60.0))
     fee_bps = float(ex_cfg.get("fee_bps", 10.0))
     slippage_bps = float(ex_cfg.get("slippage_bps", 10.0))
     cost_bps = fee_bps + slippage_bps  # 双边成本：开+平
@@ -5791,7 +5704,6 @@ def _build_trade_decision_plan(
     q90 = _safe_float(row.get("q90_change_pct"))
     conf = _safe_float(row.get("confidence_score"))
     risk_level = str(row.get("risk_level", "medium"))
-    news_risk_level_row = str(row.get("news_risk_level", "low")).strip().lower()
     allow_short = bool(row.get("policy_allow_short", True))
     horizon_label = str(row.get("horizon_label", "4h"))
     market = str(row.get("market", "")).strip().lower()
@@ -5862,29 +5774,6 @@ def _build_trade_decision_plan(
         ]
     )
     signal_key = hashlib.sha1(key_raw.encode("utf-8")).hexdigest()[:20]
-    consistency_key = "|".join([market or "-", symbol or "-", horizon_label or "-"])
-    consistency_state = _load_consistency_state(processed_dir) if (consistency_enabled and persist_touch) else {}
-    consistency_prev = consistency_state.get(consistency_key, {}) if isinstance(consistency_state, dict) else {}
-    prev_action = str(consistency_prev.get("last_action", "WAIT")).upper()
-    if prev_action not in {"LONG", "SHORT", "WAIT"}:
-        prev_action = "WAIT"
-    prev_trade_status = str(consistency_prev.get("last_trade_status", "WAIT_RULES")).upper()
-    prev_signal_key = str(consistency_prev.get("last_signal_key", "")).strip()
-    prev_price_ts_utc = str(consistency_prev.get("last_price_timestamp_utc", "")).strip()
-    prev_news_risk_level = str(consistency_prev.get("last_news_risk_level", "")).strip().lower()
-    prev_p_raw = _safe_float(consistency_prev.get("last_p_up_raw"))
-    prev_p_ewma = _safe_float(consistency_prev.get("p_up_ewma"))
-
-    p_up_raw = p_up
-    if np.isfinite(p_up_raw):
-        if np.isfinite(prev_p_ewma):
-            p_up_smooth = float(ewma_alpha * p_up_raw + (1.0 - ewma_alpha) * prev_p_ewma)
-        else:
-            p_up_smooth = float(p_up_raw)
-    else:
-        p_up_smooth = float(prev_p_ewma) if np.isfinite(prev_p_ewma) else float("nan")
-    p_up_eval = p_up_smooth if np.isfinite(p_up_smooth) else p_up_raw
-
     entry = entry_seed
     entry_touched_at = ""
     if persist_touch:
@@ -5933,20 +5822,8 @@ def _build_trade_decision_plan(
 
     model_health_norm = str(model_health).strip().lower()
     model_health_ok = model_health_norm in {"良", "中", "good", "medium"}
-    long_prob_ok = bool(
-        np.isfinite(p_up_eval)
-        and (
-            p_up_eval >= (p_bull_exit if prev_action == "LONG" else p_bull)
-        )
-    )
-    short_prob_ok = bool(
-        np.isfinite(p_up_eval)
-        and (
-            p_up_eval <= (p_bear_exit if prev_action == "SHORT" else p_bear)
-        )
-    )
     long_checks = [
-        (_t("p_up(平滑) >= 阈值", "p_up(smooth) >= threshold"), long_prob_ok),
+        (_t("p_up >= 阈值", "p_up >= threshold"), np.isfinite(p_up) and p_up >= p_bull),
         (_t("edge_score > 0（覆盖成本）", "edge_score > 0 (covers cost)"), np.isfinite(edge_long) and edge_long > 0),
         (_t("confidence >= 最低阈值", "confidence >= minimum"), np.isfinite(conf) and conf >= conf_min),
         (_t("风险非极高", "risk is not extreme"), str(risk_level) != "extreme"),
@@ -5954,7 +5831,7 @@ def _build_trade_decision_plan(
         (_t("无重大事件风险", "no major event risk"), not bool(event_risk)),
     ]
     short_checks = [
-        (_t("p_up(平滑) <= 阈值", "p_up(smooth) <= threshold"), short_prob_ok),
+        (_t("p_up <= 阈值", "p_up <= threshold"), np.isfinite(p_up) and p_up <= p_bear),
         (_t("edge_score > 0（覆盖成本）", "edge_score > 0 (covers cost)"), np.isfinite(edge_short) and edge_short > 0),
         (_t("confidence >= 最低阈值", "confidence >= minimum"), np.isfinite(conf) and conf >= conf_min),
         (_t("允许做空", "shorting allowed"), allow_short),
@@ -5972,70 +5849,6 @@ def _build_trade_decision_plan(
         action = "SHORT"
     elif long_ok and short_ok:
         action = "LONG" if edge_risk_long >= edge_risk_short else "SHORT"
-    proposed_action = action
-
-    # Consistency triggers: only allow action updates when hard triggers happen.
-    consistency_reason_codes: List[str] = []
-    edge_active_now = edge_long if proposed_action == "LONG" else edge_short
-    new_signal_trigger = bool(prev_signal_key) and prev_signal_key != signal_key
-    new_bar_trigger = bool(prev_price_ts_utc) and bool(price_timestamp_utc) and (prev_price_ts_utc != price_timestamp_utc)
-    first_seen = not bool(consistency_prev)
-    if first_seen:
-        consistency_reason_codes.append("consistency:new_bar_close")
-    if new_signal_trigger:
-        consistency_reason_codes.append("consistency:signal_key_changed")
-    if new_bar_trigger:
-        consistency_reason_codes.append("consistency:new_bar_close")
-    if np.isfinite(prev_p_raw) and np.isfinite(p_up_raw) and abs(p_up_raw - prev_p_raw) >= delta_p_threshold:
-        consistency_reason_codes.append("consistency:delta_p_trigger")
-    delta_edge_pct = delta_edge_bps_threshold / 10000.0
-    prev_edge_active = _safe_float(consistency_prev.get("last_edge_active"))
-    if (
-        np.isfinite(prev_edge_active)
-        and np.isfinite(edge_active_now)
-        and abs(edge_active_now - prev_edge_active) >= delta_edge_pct
-    ):
-        consistency_reason_codes.append("consistency:delta_edge_trigger")
-    if prev_news_risk_level and news_risk_level_row and prev_news_risk_level != news_risk_level_row:
-        consistency_reason_codes.append("consistency:news_risk_trigger")
-
-    hard_recompute = bool(consistency_reason_codes)
-    last_update_utc = pd.to_datetime(consistency_prev.get("updated_at_utc"), utc=True, errors="coerce")
-    if (
-        consistency_enabled
-        and not hard_recompute
-        and prev_action in {"LONG", "SHORT", "WAIT"}
-        and pd.notna(last_update_utc)
-        and (now_utc - last_update_utc) <= (horizon_td * 6)
-    ):
-        action = prev_action
-        consistency_reason_codes.append("consistency:no_trigger_hold")
-
-    last_action_change_utc = pd.to_datetime(
-        consistency_prev.get("last_action_change_utc"), utc=True, errors="coerce"
-    )
-    last_hold_start_utc = pd.to_datetime(
-        consistency_prev.get("last_hold_start_utc"), utc=True, errors="coerce"
-    )
-    cooldown_td = horizon_td * max(cooldown_bars, 0)
-    min_hold_td = horizon_td * max(min_hold_bars, 0)
-    if action != prev_action and prev_action in {"LONG", "SHORT"}:
-        if (
-            consistency_enabled
-            and cooldown_bars > 0
-            and pd.notna(last_action_change_utc)
-            and (now_utc - last_action_change_utc) < cooldown_td
-        ):
-            action = prev_action
-            consistency_reason_codes.append("consistency:cooldown_active")
-        elif (
-            consistency_enabled
-            and min_hold_bars > 0
-            and pd.notna(last_hold_start_utc)
-            and (now_utc - last_hold_start_utc) < min_hold_td
-        ):
-            action = prev_action
-            consistency_reason_codes.append("consistency:min_hold_active")
 
     # entry is fixed at signal snapshot (or persisted state), not refreshed with current price.
     profile_key = {
@@ -6155,13 +5968,6 @@ def _build_trade_decision_plan(
     checks_passed = int(sum(1 for _, ok in selected_checks if ok))
     checks_total = int(len(selected_checks))
     failed_checks = [label for label, ok in selected_checks if not ok]
-    for token in consistency_reason_codes:
-        if token == "consistency:cooldown_active":
-            failed_checks.append(_t("处于冷却期", "Cooldown active"))
-        elif token == "consistency:min_hold_active":
-            failed_checks.append(_t("处于最小持有期", "Minimum-hold active"))
-        elif token == "consistency:no_trigger_hold":
-            failed_checks.append(_t("未触发重算条件", "No recompute trigger"))
     gate_blocked = not (np.isfinite(current_price) and np.isfinite(entry))
     gate_no_go = _is_go_live_no_go()
     if gate_no_go:
@@ -6196,21 +6002,6 @@ def _build_trade_decision_plan(
         trade_status_note = _t("已到价 + 规则通过，可执行。", "Entry touched + rules passed, executable.")
     elif trade_status == "WAIT_ENTRY":
         trade_status_note = _t("规则已通过，等待到价。", "Rules passed, waiting for entry touch.")
-    elif "consistency:cooldown_active" in consistency_reason_codes:
-        trade_status_note = _t(
-            "处于冷却期，沿用上一信号，暂不切换。",
-            "Cooldown active. Keep previous signal and avoid switching.",
-        )
-    elif "consistency:min_hold_active" in consistency_reason_codes:
-        trade_status_note = _t(
-            "处于最小持有期，沿用上一信号，暂不切换。",
-            "Minimum-hold active. Keep previous signal and avoid switching.",
-        )
-    elif "consistency:no_trigger_hold" in consistency_reason_codes:
-        trade_status_note = _t(
-            "未触发重算条件，沿用上一信号。",
-            "No recompute trigger. Keep previous signal.",
-        )
     elif trade_status == "WAIT_RULES" and entry_touched:
         fail_text = " / ".join(failed_checks[:3]) if failed_checks else _t("未知", "unknown")
         trade_status_note = _t(f"已到价，但规则未通过：{fail_text}", f"Entry touched but rules failed: {fail_text}")
@@ -6233,7 +6024,7 @@ def _build_trade_decision_plan(
     execution_state_text = _execution_state_text(execution_state)
     execution_state_icon = _execution_state_icon(execution_state)
 
-    news_risk_level = news_risk_level_row
+    news_risk_level = str(row.get("news_risk_level", "low")).strip().lower()
     news_gate_raw = str(row.get("news_gate_pass", "true")).strip().lower()
     news_event_raw = str(row.get("news_event_risk", "false")).strip().lower()
     news_gate_pass = news_gate_raw in {"1", "true", "yes", "y", "on"}
@@ -6246,74 +6037,6 @@ def _build_trade_decision_plan(
     conf_norm = float(np.clip(_safe_float(conf) / 100.0, 0.0, 1.0)) if np.isfinite(conf) else 0.0
     risk_norm = {"low": 1.0, "medium": 0.75, "high": 0.45, "extreme": 0.1}.get(str(risk_level).lower(), 0.4)
     signal_score = float(np.clip(100.0 * (0.35 * (strength_score / 100.0) + 0.30 * edge_norm + 0.20 * conf_norm + 0.15 * risk_norm), 0.0, 100.0))
-
-    action_changed = prev_action != action
-    state_changed = prev_trade_status != trade_status
-    consistency_reason_codes = list(dict.fromkeys(consistency_reason_codes))
-    if (action_changed or state_changed) and not consistency_reason_codes:
-        consistency_reason_codes = ["consistency:new_bar_close"] if new_bar_trigger else ["consistency:signal_key_changed"]
-    consistency_reason_text = " | ".join(_reason_token_text(x) for x in consistency_reason_codes) if consistency_reason_codes else "-"
-
-    now_utc_text = pd.Timestamp.now(tz="UTC").strftime("%Y-%m-%d %H:%M:%S UTC")
-    if consistency_enabled and persist_touch:
-        hold_start_ts_text = str(consistency_prev.get("last_hold_start_utc", ""))
-        if action in {"LONG", "SHORT"}:
-            if prev_action != action or not hold_start_ts_text:
-                hold_start_ts_text = now_utc_text
-        elif action not in {"LONG", "SHORT"}:
-            hold_start_ts_text = ""
-        action_change_ts_text = str(consistency_prev.get("last_action_change_utc", ""))
-        if action_changed:
-            action_change_ts_text = now_utc_text
-        consistency_state[consistency_key] = {
-            "market": market,
-            "symbol": symbol,
-            "horizon_label": horizon_label,
-            "last_action": action,
-            "last_trade_status": trade_status,
-            "last_signal_key": signal_key,
-            "last_signal_time_utc": signal_time_utc,
-            "last_price_timestamp_utc": price_timestamp_utc,
-            "last_p_up_raw": p_up_raw,
-            "p_up_ewma": p_up_smooth,
-            "last_edge_active": edge_active_now,
-            "last_news_risk_level": news_risk_level_row,
-            "last_action_change_utc": action_change_ts_text,
-            "last_hold_start_utc": hold_start_ts_text,
-            "updated_at_utc": now_utc_text,
-        }
-        _save_consistency_state(consistency_state, processed_dir)
-
-        if action_changed or state_changed:
-            tz_name_log = str(row.get("timezone", "Asia/Shanghai")) or "Asia/Shanghai"
-            try:
-                market_time = pd.Timestamp.now(tz=tz_name_log).strftime("%Y-%m-%d %H:%M:%S %z")
-            except Exception:
-                market_time = pd.Timestamp.now(tz="UTC").strftime("%Y-%m-%d %H:%M:%S UTC")
-            metric_delta = (
-                f"p_up_raw:{_format_float(prev_p_raw,4)}->{_format_float(p_up_raw,4)}|"
-                f"p_up_smooth:{_format_float(prev_p_ewma,4)}->{_format_float(p_up_smooth,4)}|"
-                f"edge_active:{_format_change_pct(prev_edge_active)}->{_format_change_pct(edge_active_now)}"
-            )
-            _append_signal_change_log(
-                {
-                    "change_time_utc": now_utc_text,
-                    "change_time_market": market_time,
-                    "market": market,
-                    "symbol": symbol,
-                    "horizon_label": horizon_label,
-                    "old_action": prev_action,
-                    "new_action": action,
-                    "old_state": prev_trade_status,
-                    "new_state": trade_status,
-                    "reason_code": ";".join(consistency_reason_codes),
-                    "key_metric_delta": metric_delta,
-                    "snapshot_id_old": prev_signal_key,
-                    "snapshot_id_new": signal_key,
-                },
-                processed_dir,
-            )
-
     return {
         "action": action,
         "action_cn": {"LONG": _t("做多", "Long"), "SHORT": _t("做空", "Short"), "WAIT": _t("观望", "Wait")}.get(action, _t("观望", "Wait")),
@@ -6341,15 +6064,6 @@ def _build_trade_decision_plan(
         "price_source": price_source,
         "price_timestamp_market": price_timestamp_market,
         "price_timestamp_utc": price_timestamp_utc,
-        "consistency_key": consistency_key,
-        "consistency_reason_codes": consistency_reason_codes,
-        "consistency_reason_text": consistency_reason_text,
-        "p_up_raw": p_up_raw,
-        "p_up_smooth": p_up_smooth,
-        "consistency_prev_action": prev_action,
-        "consistency_prev_trade_status": prev_trade_status,
-        "consistency_action_changed": action_changed,
-        "consistency_state_changed": state_changed,
         "failed_checks": failed_checks,
         "gate_reason_codes": gate_reason_codes,
         "horizon_label": horizon_label,
@@ -7647,7 +7361,7 @@ def _build_snapshot_for_selected(
             timezone="Asia/Shanghai",
             horizon_unit="hour",
             horizon_steps=4,
-            history_lookback_days=1825,
+            history_lookback_days=365,
         )
     if market == "cn_equity":
         code = str(row.get("code", row.get("symbol", ""))).lower()
@@ -7660,7 +7374,7 @@ def _build_snapshot_for_selected(
             timezone="Asia/Shanghai",
             horizon_unit="day",
             horizon_steps=3,
-            history_lookback_days=1825,
+            history_lookback_days=730,
         )
     return _build_selected_snapshot_cached(
         instrument_id=str(row.get("symbol", "")).lower(),
@@ -7671,7 +7385,7 @@ def _build_snapshot_for_selected(
         timezone="America/New_York",
         horizon_unit="day",
         horizon_steps=3,
-        history_lookback_days=1825,
+        history_lookback_days=730,
     )
 
 

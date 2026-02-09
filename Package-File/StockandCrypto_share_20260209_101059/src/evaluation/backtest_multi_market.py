@@ -1287,7 +1287,7 @@ def run_single_symbol_backtest(
     bt_cfg = cfg.get("backtest_multi_market", {})
     lookback_days_cfg = bt_cfg.get(
         "lookback_days",
-        {"crypto": 1825, "cn_equity": 1825, "us_equity": 1825},
+        {"crypto": 540, "cn_equity": 1200, "us_equity": 1200},
     )
     min_train_size = int(bt_cfg.get("min_train_size", 180))
     test_size = int(bt_cfg.get("test_size", 60))
@@ -1320,7 +1320,7 @@ def run_single_symbol_backtest(
     mk = str(market)
     sym = str(symbol)
     prov = str(provider or ("binance" if mk == "crypto" and sym.upper().endswith("USDT") else "yahoo"))
-    lb_days = int(lookback_days if lookback_days is not None else lookback_days_cfg.get(mk, 1825))
+    lb_days = int(lookback_days if lookback_days is not None else lookback_days_cfg.get(mk, 720))
 
     try:
         bars, _ = _fetch_daily_bars(
@@ -1388,7 +1388,7 @@ def run_multi_market_backtest(config_path: str) -> None:
 
     lookback_days_cfg = bt_cfg.get(
         "lookback_days",
-        {"crypto": 1825, "cn_equity": 1825, "us_equity": 1825},
+        {"crypto": 540, "cn_equity": 1200, "us_equity": 1200},
     )
     min_train_size = int(bt_cfg.get("min_train_size", 180))
     test_size = int(bt_cfg.get("test_size", 60))
@@ -1441,7 +1441,7 @@ def run_multi_market_backtest(config_path: str) -> None:
         symbol = str(inst.get("symbol", ""))
         provider = str(inst.get("provider", "yahoo"))
         fallback_symbol = str(inst.get("fallback_symbol", ""))
-        lookback_days = int(lookback_days_cfg.get(market, 1825))
+        lookback_days = int(lookback_days_cfg.get(market, 720))
         try:
             bars, data_source = _fetch_daily_bars(
                 market=market,

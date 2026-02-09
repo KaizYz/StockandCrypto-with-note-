@@ -11,6 +11,3 @@ data/models/*
 
 # Local env
 .venv/
-
-# local share package archives
-Package-File/*.zip
