@@ -544,8 +544,12 @@ def _compute_factor_values(
 
 def _build_snapshot_rows(instruments: List[Dict[str, Any]], cfg: Dict[str, Any]) -> List[Dict[str, Any]]:
     binance_endpoints = cfg.get("data", {}).get(
-        "binance_endpoints", ["https://api.binance.us", "https://api.binance.com"]
+        "binance_endpoints", ["https://api.binance.com", "https://api.binance.us"]
     )
+    if bool(cfg.get("data", {}).get("disable_binance_us", False)):
+        filtered = [ep for ep in binance_endpoints if "binance.us" not in str(ep).lower()]
+        if filtered:
+            binance_endpoints = filtered
     now_utc = _now_utc()
     rows: List[Dict[str, Any]] = []
     yahoo_symbols = [

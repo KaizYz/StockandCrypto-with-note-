@@ -366,6 +366,11 @@ data_gate:
     daily: 500
 
 training:
+  lookback_days: 1825
+  fallback_min_days: 1095
+  freeze_test_months: 6
+  retrain_schedule: "weekly"
+  publish_mode: "frozen_version"
   holdout:
     enabled: true
     ratio: 0.10
@@ -431,13 +436,6 @@ decision:
       p_bull_exit: 0.52
       p_bear_exit: 0.48
 
-training:
-  lookback_days: 1825
-  fallback_min_days: 1095
-  freeze_test_months: 6
-  retrain_schedule: "weekly"
-  publish_mode: "frozen_version"
-
 data_quality:
   max_missing_rate: 0.05
   outlier_detection:
@@ -450,6 +448,71 @@ split:
   gap_bars: "auto"
   n_splits_intraday: 6
   n_splits_daily: 5
+
+training_stability:
+  enabled: true
+  output_dir: "experiments/stability_training"
+  base_seed: 42
+  seed_step: 17
+  run_profile:
+    full_symbol_runs: 5
+    core_market_runs: 50
+    core_symbol_runs: 50
+    min_runs_before_stop: 10
+  full_universe:
+    enabled: true
+    use_cached_ranked_universe: false
+    markets: ["crypto", "cn_equity", "us_equity"]
+    pools:
+      crypto: ["top3"]
+      cn_equity: ["csi300"]
+      us_equity: ["sp500"]
+    max_symbols_per_market:
+      crypto: 0
+      cn_equity: 0
+      us_equity: 0
+  core_markets:
+    enabled: true
+    definitions:
+      - name: "crypto_core"
+        market: "crypto"
+        pools: ["top3"]
+      - name: "cn_core"
+        market: "cn_equity"
+        pools: ["csi300"]
+      - name: "us_core"
+        market: "us_equity"
+        pools: ["sp500"]
+  core_symbols:
+    enabled: true
+    symbols: ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+  stop_criteria:
+    metric_window: 10
+    volatility_threshold_pct: 5.0
+    max_flip_rate: 0.20
+    min_net_return_delta: -0.02
+    max_drawdown_delta: 0.02
+  execution:
+    symbol_pipeline:
+      - "src.ingestion.update_data"
+      - "src.preprocessing.validate_data"
+      - "src.features.build_features"
+      - "src.labels.build_labels"
+      - "src.split.build_folds"
+      - "src.models.train"
+      - "src.models.calibrate"
+      - "src.models.predict"
+      - "src.evaluation.walk_forward"
+      - "src.evaluation.backtest"
+    market_pipeline:
+      - "src.markets.tracking"
+      - "src.markets.snapshot"
+      - "src.models.generate_policy_signals"
+      - "src.evaluation.backtest_multi_market"
+  overrides:
+    disable_hpo_for_repeats: true
+    disable_binance_us_for_history: true
+    run_backtest_multi_market_for_symbol_tier: false
 
 gate:
   min_history_days: 1825

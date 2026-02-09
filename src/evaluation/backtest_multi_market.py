@@ -505,8 +505,12 @@ def _fetch_daily_bars(
             return _fetch_coingecko_daily_bars(symbol, lookback_days=lookback_days)
         endpoints = cfg.get("data", {}).get(
             "binance_endpoints",
-            ["https://api.binance.us", "https://api.binance.com"],
+            ["https://api.binance.com", "https://api.binance.us"],
         )
+        if bool(cfg.get("data", {}).get("disable_binance_us", False)):
+            filtered = [ep for ep in endpoints if "binance.us" not in str(ep).lower()]
+            if filtered:
+                endpoints = filtered
         return _fetch_binance_daily_bars(symbol, lookback_days=lookback_days, endpoints=endpoints)
 
     try:

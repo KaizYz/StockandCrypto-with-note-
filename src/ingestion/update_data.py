@@ -13,6 +13,8 @@ from src.preprocessing.quality import build_quality_report
 from src.utils.config import load_config
 from src.utils.io import ensure_dir, save_json, write_csv
 
+YAHOO_CHART_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
+
 
 def _interval_to_pandas_freq(interval: str) -> str:
     mapping = {"1h": "h", "1d": "D"}
@@ -96,6 +98,72 @@ def fetch_binance_klines(
     for col in ["open", "high", "low", "close", "volume"]:
         df[col] = pd.to_numeric(df[col], errors="coerce")
     return df
+
+
+def fetch_yahoo_klines(
+    symbol: str,
+    interval: str,
+    start_ms: int,
+    end_ms: int,
+    timeout_sec: int = 20,
+) -> pd.DataFrame:
+    interval_map = {"1h": "60m", "1d": "1d"}
+    if interval not in interval_map:
+        raise ValueError(f"Unsupported Yahoo interval: {interval}")
+
+    url = YAHOO_CHART_URL.format(symbol=symbol)
+    params = {
+        "interval": interval_map[interval],
+        "period1": int(start_ms // 1000),
+        "period2": int(end_ms // 1000),
+        "includePrePost": "false",
+        "events": "div,splits",
+    }
+    r = requests.get(
+        url,
+        params=params,
+        timeout=timeout_sec,
+        headers={
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+            )
+        },
+    )
+    r.raise_for_status()
+    payload = r.json()
+    result = payload.get("chart", {}).get("result", [])
+    if not result:
+        return pd.DataFrame(columns=["open_time_ms", "open", "high", "low", "close", "volume"])
+    item = result[0]
+    timestamps = item.get("timestamp", []) or []
+    quote_list = item.get("indicators", {}).get("quote", []) or []
+    if not timestamps or not quote_list:
+        return pd.DataFrame(columns=["open_time_ms", "open", "high", "low", "close", "volume"])
+
+    q = quote_list[0]
+    n = min(
+        len(timestamps),
+        len(q.get("open", []) or []),
+        len(q.get("high", []) or []),
+        len(q.get("low", []) or []),
+        len(q.get("close", []) or []),
+        len(q.get("volume", []) or []),
+    )
+    if n <= 0:
+        return pd.DataFrame(columns=["open_time_ms", "open", "high", "low", "close", "volume"])
+
+    df = pd.DataFrame(
+        {
+            "open_time_ms": (pd.Series(timestamps[:n], dtype="int64") * 1000).astype("int64"),
+            "open": pd.to_numeric(pd.Series(q.get("open", [])[:n]), errors="coerce"),
+            "high": pd.to_numeric(pd.Series(q.get("high", [])[:n]), errors="coerce"),
+            "low": pd.to_numeric(pd.Series(q.get("low", [])[:n]), errors="coerce"),
+            "close": pd.to_numeric(pd.Series(q.get("close", [])[:n]), errors="coerce"),
+            "volume": pd.to_numeric(pd.Series(q.get("volume", [])[:n]), errors="coerce"),
+        }
+    )
+    return df.dropna(subset=["open_time_ms"]).reset_index(drop=True)
 
 
 def generate_synthetic_ohlcv(
@@ -195,6 +263,10 @@ def run_update(config_path: str) -> None:
         "binance_endpoints",
         ["https://api.binance.com", "https://api.binance.us"],
     )
+    if bool(data_cfg.get("disable_binance_us", False)):
+        filtered = [ep for ep in binance_endpoints if "binance.us" not in str(ep).lower()]
+        if filtered:
+            binance_endpoints = filtered
     raw_dir = ensure_dir(paths_cfg.get("raw_data_dir", "data/raw"))
     processed_dir = ensure_dir(paths_cfg.get("processed_data_dir", "data/processed"))
     seed = int(cfg.get("project", {}).get("seed", 42))
@@ -236,6 +308,23 @@ def run_update(config_path: str) -> None:
                 used_source = "synthetic_fallback"
                 print(
                     f"[WARN] Binance fetch failed for {branch_name}: {last_exc}. Falling back to synthetic data."
+                )
+        elif source == "yahoo":
+            try:
+                df_raw = fetch_yahoo_klines(
+                    symbol=str(symbol),
+                    interval=interval,
+                    start_ms=int(start_utc.timestamp() * 1000),
+                    end_ms=int(end_utc.timestamp() * 1000),
+                )
+                if df_raw.empty:
+                    raise RuntimeError("empty dataset from yahoo")
+                used_source = "yahoo_chart"
+                fetched_ok = True
+            except Exception as exc:
+                used_source = "synthetic_fallback"
+                print(
+                    f"[WARN] Yahoo fetch failed for {branch_name}: {exc}. Falling back to synthetic data."
                 )
 
         if not fetched_ok:
