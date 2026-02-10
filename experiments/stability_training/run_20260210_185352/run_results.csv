@@ -1,0 +1,8 @@
+task_id,tier,group_key,run_index,total_runs,seed,market,symbol,provider,status,error,auc,brier,coverage,signal_flip_rate,net_return,max_drawdown
+core_market_cn_core_001,core_market,core_market::cn_core,1,50,42,cn_equity,cn_core,,success,,,,,,-0.0030912994569016377,-0.008550119198738326
+core_market_cn_core_002,core_market,core_market::cn_core,2,50,59,cn_equity,cn_core,,success,,,,,,-0.0030912994569016377,-0.008550119198738326
+core_market_cn_core_003,core_market,core_market::cn_core,3,50,76,cn_equity,cn_core,,success,,,,,,-0.0030912994569016377,-0.008550119198738326
+core_market_cn_core_004,core_market,core_market::cn_core,4,50,93,cn_equity,cn_core,,success,,,,,,-0.0030912994569016377,-0.008550119198738326
+core_market_cn_core_005,core_market,core_market::cn_core,5,50,110,cn_equity,cn_core,,success,,,,,,-0.0030912994569016377,-0.008550119198738326
+core_market_cn_core_006,core_market,core_market::cn_core,6,50,127,cn_equity,cn_core,,success,,,,,,-0.0030912994569016377,-0.008550119198738326
+core_market_cn_core_007,core_market,core_market::cn_core,7,50,144,cn_equity,cn_core,,failed,FileNotFoundError: [Errno 2] No such file or directory: 'experiments\\stability_training\\run_20260210_185352\\runs\\core_market_cn_core_007\\logs\\src_markets_snapshot.log',,,,,,
