@@ -441,6 +441,15 @@
       "metrics_ok": false,
       "flip_ok": false,
       "perf_ok": false
-    }
-  ]
-}
+    },
+    {
+      "eligible": true,
+      "should_stop": false,
+      "auc_cv_pct": 2.053652487745022,
+      "brier_cv_pct": NaN,
+      "coverage_cv_pct": NaN,
+      "flip_mean": NaN,
+      "ret_delta": NaN,
+      "dd_delta": NaN,
+      "metrics_ok": false,
+      "flip_ok": 

@@ -28,3 +28,4 @@ core_symbol_BTCUSDT_026,core_symbol,core_symbol::BTCUSDT,26,50,467,crypto,BTCUSD
 core_symbol_BTCUSDT_027,core_symbol,core_symbol::BTCUSDT,27,50,484,crypto,BTCUSDT,binance,success,,0.5140467418914308,,,,,
 core_symbol_BTCUSDT_028,core_symbol,core_symbol::BTCUSDT,28,50,501,crypto,BTCUSDT,binance,success,,0.552281794140953,,,,,
 core_symbol_BTCUSDT_029,core_symbol,core_symbol::BTCUSDT,29,50,518,crypto,BTCUSDT,binance,failed,FileNotFoundError: [Errno 2] No such file or directory: 'experiments\\stability_training\\run_20260210_191456\\runs\\core_symbol_BTCUSDT_029\\logs\\src_evaluation_walk_forward.log',,,,,,
+core_symbol_BTCUSDT_030,core_symbol,core_symbol::BTCUSDT,30,50,535,crypto,BTCUSDT,binance,success,,0.5440806860760377,,,,,
