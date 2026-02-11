@@ -133,3 +133,6 @@ core_market_us_core_031,core_market,core_market::us_core,31,50,552,us_equity,us_
 core_market_us_core_032,core_market,core_market::us_core,32,50,569,us_equity,us_core,,success,,,,,,-0.006051083668753562,-0.015771754410507686
 core_market_us_core_033,core_market,core_market::us_core,33,50,586,us_equity,us_core,,success,,,,,,-0.006051005501034499,-0.01577165099649406
 core_market_us_core_034,core_market,core_market::us_core,34,50,603,us_equity,us_core,,success,,,,,,-0.00605116070702145,-0.01577214924657075
+core_market_us_core_035,core_market,core_market::us_core,35,50,620,us_equity,us_core,,success,,,,,,-0.006051314005759175,-0.015772059142375186
+core_market_us_core_036,core_market,core_market::us_core,36,50,637,us_equity,us_core,,success,,,,,,-0.00605126517604525,-0.015772330668790586
+core_market_us_core_037,core_market,core_market::us_core,37,50,654,us_equity,us_core,,success,,,,,,-0.006051706598315512,-0.01577382046520161

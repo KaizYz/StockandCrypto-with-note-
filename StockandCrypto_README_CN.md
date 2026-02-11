@@ -1,26 +1,26 @@
 # StockandCrypto
 
-An end-to-end, multi-market forecasting MVP aligned with `Project_plan.md`.
+一个端到端的多市场预测 MVP（与 `Project_plan.md` 对齐）。
 
-## Overview
+## 概览
 
-- **BTC model outputs**
-  - **Direction:** `P(up)` / `P(down)`
-  - **Start window:** `W0–W3`
-  - **Interval forecast:** `q10 / q50 / q90`
-- **Evaluation**
-  - **Purged walk-forward** evaluation (`gap = max_horizon`)
-- **Live multi-market snapshot cards** (Crypto + China A-shares + US equities)
-  - Current price
-  - Forecast price
-  - Forecast move (magnitude)
-  - Expected date
-  - Supported universes / instruments
-    - **Crypto:** BTC / ETH / SOL + Top 100 by market cap (excluding stablecoins such as USDT/USDC)
-    - **China A-shares:** SSE Index constituents, CSI 300 constituents
-    - **US equities:** Dow 30, Nasdaq 100, S&P 500 constituents
+- **BTC 模型输出**
+  - **方向：** `P(up)` / `P(down)`
+  - **启动窗口：** `W0–W3`
+  - **区间预测：** `q10 / q50 / q90`
+- **评估**
+  - **Purged Walk-Forward** 评估（`gap = max_horizon`）
+- **多市场实时快照卡片**（加密 + 中国 A 股 + 美股）
+  - 当前价格
+  - 预测价格
+  - 预测幅度（magnitude）
+  - 预期日期
+  - 支持的标的池 / 范围
+    - **加密：** BTC / ETH / SOL + 市值前 100（剔除稳定币，如 USDT/USDC）
+    - **中国 A 股：** 上证指数成分股、沪深 300 成分股
+    - **美股：** 道琼斯 30、纳斯达克 100、标普 500 成分股
 
-## Project Structure
+## 项目结构
 
 ```text
 CryptoForecast/
@@ -46,7 +46,7 @@ CryptoForecast/
     └── app.py
 ```
 
-## Setup
+## 环境配置（Setup）
 
 ```bash
 python -m venv .venv
@@ -54,7 +54,7 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-## Pipeline Commands
+## 流水线命令（Pipeline Commands）
 
 ```bash
 python -m src.ingestion.update_data --config configs/config.yaml
@@ -79,34 +79,34 @@ python -m src.reporting.export_report --config configs/config.yaml
 python -m streamlit run dashboard/app.py
 ```
 
-## One-shot Run
+## 一键运行（One-shot Run）
 
 ```bash
 powershell -ExecutionPolicy Bypass -File scripts/run_pipeline.ps1
 ```
 
-## Notes
+## 备注（Notes）
 
-- Data is stored in UTC (`timestamp_utc`) and displayed in each market’s local timezone (`timestamp_market`).
-- If the Binance API fetch fails, ingestion automatically falls back to synthetic data so the pipeline remains runnable.
-- Model artifacts are versioned under `data/models/<timestamp>_<branch>/`.
-- Reproducibility: `seed=42`, and a config snapshot is saved with each model version.
-- Crypto “current price” uses the live ticker (not the last close) in the dashboard.
-- China A-shares / US equities “current price” prioritizes Eastmoney live quotes; falls back to Yahoo/Stooq latest available price.
-- Snapshot output includes six quant factors:
-  - **Risk:** `size_factor`, `value_factor`, `growth_factor`
-  - **Behavior:** `momentum_factor`, `reversal_factor`, `low_vol_factor`
-- Risk factor columns also include source metadata (fundamental-first with proxy fallback).
+- 数据以 UTC 存储（`timestamp_utc`），并按各市场本地时区展示（`timestamp_market`）。
+- 若 Binance API 拉取失败，`ingestion` 会自动回退到合成数据，保证流水线仍可运行。
+- 模型产物按版本存放于 `data/models/<timestamp>_<branch>/`。
+- 可复现性：`seed=42`，每个模型版本都会保存一份配置快照（config snapshot）。
+- Dashboard 中的加密“当前价格”使用实时 ticker（不是上一个收盘价）。
+- 中国 A 股 / 美股“当前价格”优先使用东方财富实时行情；若不可用则回退到 Yahoo/Stooq 的最新可用价格。
+- 快照输出包含 6 个量化因子：
+  - **风险类：** `size_factor`, `value_factor`, `growth_factor`
+  - **行为类：** `momentum_factor`, `reversal_factor`, `low_vol_factor`
+- 风险因子列还包含来源元数据（基本面优先，缺失时使用代理指标回退）。
 
-## Tracking Workflow
+## 跟踪流程（Tracking Workflow）
 
-Run universe selection + scoring + tracking outputs:
+运行标的池选择 + 打分 + 跟踪输出：
 
 ```bash
 python -m src.markets.tracking --config configs/config.yaml
 ```
 
-Generated files are saved under `data/processed/tracking/`:
+生成文件保存于 `data/processed/tracking/`：
 
 - `universe_crypto.json`, `universe_ashares.json`, `universe_us.json`
 - `coverage_matrix.csv`
@@ -114,44 +114,44 @@ Generated files are saved under `data/processed/tracking/`:
 - `tracking_actions.csv`
 - `data_quality_report.md`
 
-## Crypto Session Forecast
+## 加密交易时段预测（Crypto Session Forecast）
 
-Build crypto time-session outputs (Beijing time, 24h):
+构建加密市场时段输出（北京时间，24 小时）：
 
 ```bash
 python -m src.markets.session_forecast --config configs/config.yaml
 ```
 
-Generated files under `data/processed/`:
+生成文件位于 `data/processed/`：
 
 - `session_forecast_hourly.csv`
 - `session_forecast_blocks.csv`
 - `session_forecast_daily.csv`
 
-## Policy Signals
+## 策略信号（Policy Signals）
 
-Generate policy-layer outputs (`Long/Short/Flat`, position sizing, expected edge):
+生成策略层输出（`Long/Short/Flat`、仓位大小、期望优势/edge）：
 
 ```bash
 python -m src.models.generate_policy_signals --config configs/config.yaml
 ```
 
-Generated files:
+生成文件：
 
 - `data/processed/policy_signals_hourly.csv`
 - `data/processed/policy_signals_daily.csv`
 - `data/processed/tracking/policy_signals_multi_market.csv`
 - `data/processed/policy_signals_summary.json`
 
-## Multi-Market Backtest
+## 多市场回测（Multi-Market Backtest）
 
-Run unified walk-forward backtest for Crypto / China A-shares / US equities:
+对加密 / 中国 A 股 / 美股运行统一 Walk-Forward 回测：
 
 ```bash
 python -m src.evaluation.backtest_multi_market --config configs/config.yaml
 ```
 
-Generated files under `data/processed/backtest/`:
+生成文件位于 `data/processed/backtest/`：
 
 - `trades.csv`
 - `equity.csv`
@@ -163,11 +163,11 @@ Generated files under `data/processed/backtest/`:
 - `data_integrity_checks.json`
 - `survivorship_coverage.csv`
 
-Dashboard includes the page: `Crypto Trading Session Forecast`.
+Dashboard 包含页面：`Crypto Trading Session Forecast`（加密交易时段预测）。
 
-## Governance Outputs
+## 治理输出（Governance Outputs）
 
-The pipeline emits governance artifacts aligned with `Pick_stock/model_training_playbook.md`:
+流水线会输出与 `Pick_stock/model_training_playbook.md` 对齐的治理产物：
 
 - `data/processed/data_integrity_checks.json`
 - `data/processed/folds_manifest.csv`
