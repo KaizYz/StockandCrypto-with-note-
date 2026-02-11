@@ -1545,6 +1545,22 @@
       "tier": "core_market",
       "group_key": "core_market::us_core",
       "run_index": 1
+    },
+    {
+      "eligible": false,
+      "should_stop": false,
+      "task_id": "core_market_us_core_002",
+      "tier": "core_market",
+      "group_key": "core_market::us_core",
+      "run_index": 2
+    },
+    {
+      "eligible": false,
+      "should_stop": false,
+      "task_id": "core_market_us_core_003",
+      "tier": "core_market",
+      "group_key": "core_market::us_core",
+      "run_index": 3
     }
   ]
 }

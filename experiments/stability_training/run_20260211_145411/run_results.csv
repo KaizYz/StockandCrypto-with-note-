@@ -100,3 +100,5 @@ core_market_crypto_core_048,core_market,core_market::crypto_core,48,50,841,crypt
 core_market_crypto_core_049,core_market,core_market::crypto_core,49,50,858,crypto,crypto_core,,success,,,,,,,
 core_market_crypto_core_050,core_market,core_market::crypto_core,50,50,875,crypto,crypto_core,,success,,,,,,,
 core_market_us_core_001,core_market,core_market::us_core,1,50,42,us_equity,us_core,,success,,,,,,-0.006051239196730974,-0.015774103000656875
+core_market_us_core_002,core_market,core_market::us_core,2,50,59,us_equity,us_core,,success,,,,,,-0.006051391312526637,-0.015775088426138825
+core_market_us_core_003,core_market,core_market::us_core,3,50,76,us_equity,us_core,,success,,,,,,-0.006051392082677324,-0.015775151663594625

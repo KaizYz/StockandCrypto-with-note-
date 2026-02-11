@@ -1918,6 +1918,44 @@
       "signal_flip_rate": NaN,
       "net_return": -0.006051239196730974,
       "max_drawdown": -0.015774103000656875
+    },
+    {
+      "task_id": "core_market_us_core_002",
+      "tier": "core_market",
+      "group_key": "core_market::us_core",
+      "run_index": 2,
+      "total_runs": 50,
+      "seed": 59,
+      "market": "us_equity",
+      "symbol": "us_core",
+      "provider": "",
+      "status": "success",
+      "error": "",
+      "auc": NaN,
+      "brier": NaN,
+      "coverage": NaN,
+      "signal_flip_rate": NaN,
+      "net_return": -0.006051391312526637,
+      "max_drawdown": -0.015775088426138825
+    },
+    {
+      "task_id": "core_market_us_core_003",
+      "tier": "core_market",
+      "group_key": "core_market::us_core",
+      "run_index": 3,
+      "total_runs": 50,
+      "seed": 76,
+      "market": "us_equity",
+      "symbol": "us_core",
+      "provider": "",
+      "status": "success",
+      "error": "",
+      "auc": NaN,
+      "brier": NaN,
+      "coverage": NaN,
+      "signal_flip_rate": NaN,
+      "net_return": -0.006051392082677324,
+      "max_drawdown": -0.015775151663594625
     }
   ]
 }

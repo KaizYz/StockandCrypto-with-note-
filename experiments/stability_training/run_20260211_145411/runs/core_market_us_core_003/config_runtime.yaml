@@ -1,0 +1,633 @@
+project:
+  name: BTC Trend & Volatility Forecast
+  seed: 76
+paths:
+  raw_data_dir: data/raw
+  processed_data_dir: data/processed
+  models_dir: data/models
+data:
+  source: binance
+  symbol: BTCUSDT
+  binance_endpoints:
+  - https://api.binance.com
+  - https://api.binance.us
+  branches:
+    hourly:
+      interval: 1h
+      lookback_days: 1825
+      market_tz: Asia/Shanghai
+      horizons:
+      - 1
+      - 2
+      - 4
+      lag_returns:
+      - 1
+      - 2
+      - 4
+      - 12
+      - 24
+      rolling_mean_return:
+      - 24
+      - 72
+      - 168
+      rolling_vol_windows:
+      - 24
+      - 72
+      - 168
+      volume_ma_windows:
+      - 24
+      - 72
+      time_features: hourly
+    daily:
+      interval: 1d
+      lookback_days: 1825
+      market_tz: Asia/Shanghai
+      horizons:
+      - 1
+      - 3
+      - 7
+      lag_returns:
+      - 1
+      - 3
+      - 7
+      - 14
+      rolling_mean_return:
+      - 7
+      - 30
+      - 90
+      rolling_vol_windows:
+      - 7
+      - 30
+      - 90
+      volume_ma_windows:
+      - 7
+      - 30
+      time_features: daily
+  disable_binance_us: true
+features:
+  ema_windows:
+  - 8
+  - 20
+  - 55
+  - 144
+  - 233
+  macd_windows:
+  - 12
+  - 26
+  - 9
+  bollinger_window: 20
+  bollinger_std: 2.0
+  winsorize:
+    enabled: true
+    low_q: 0.01
+    high_q: 0.99
+labels:
+  start_threshold_quantile: 0.8
+  threshold_recent_bars_hourly: 8760
+  threshold_recent_bars_daily: 1825
+  start_windows:
+    hourly:
+    - 1
+    - 2
+    - 4
+    daily:
+    - 1
+    - 3
+    - 7
+  include_high_low_targets: false
+models:
+  mvp_backend: xgboost
+  gpu:
+    enabled: true
+    fallback_to_cpu: true
+    lightgbm_device_type: gpu
+    xgboost_device: cuda
+    xgboost_tree_method: hist
+  train_ratio: 0.8
+  quantiles:
+  - 0.1
+  - 0.5
+  - 0.9
+  classifier:
+    n_estimators: 240
+    learning_rate: 0.03
+    num_leaves: 63
+    max_depth: -1
+    subsample: 0.8
+    colsample_bytree: 0.8
+    reg_alpha: 0.0
+    reg_lambda: 0.0
+  regressor:
+    n_estimators: 240
+    learning_rate: 0.03
+    num_leaves: 63
+    max_depth: -1
+    subsample: 0.8
+    colsample_bytree: 0.8
+    reg_alpha: 0.0
+    reg_lambda: 0.0
+  calibration:
+    enabled: true
+    method: sigmoid
+    cv: 3
+validation:
+  max_folds: 5
+  test_size:
+    hourly: 120
+    daily: 30
+  min_train_size:
+    hourly: 1800
+    daily: 500
+backtest:
+  p_up_long: 0.55
+  p_up_short: 0.45
+  fee_bps: 10
+  slippage_bps: 10
+backtest_multi_market:
+  enabled: true
+  lookback_days:
+    crypto: 1825
+    cn_equity: 1825
+    us_equity: 1825
+  min_train_size: 180
+  test_size: 60
+  max_folds: 4
+  max_symbols_per_market:
+    crypto: 0
+    cn_equity: 0
+    us_equity: 8
+  strategies:
+  - policy
+  - buy_hold
+  - ma_crossover
+  - naive_prev_bar
+  - lux_machine_supertrend
+  impact:
+    lambda_bps: 1.0
+    beta: 0.5
+  risk_exits:
+    enabled: true
+    stop_loss_pct: 0.015
+    take_profit_pct: 0.03
+policy:
+  thresholds:
+    p_bull: 0.55
+    p_bear: 0.45
+    ret_threshold: 0.002
+  execution:
+    fee_bps: 10
+    slippage_bps: 10
+    impact_bps: 1.0
+    max_position: 1.0
+    min_position: 0.01
+    market_cost_profiles:
+      crypto_perp:
+        fee_bps: 6
+        slippage_bps: 4
+        impact_bps: 1.2
+        delay_bars: 1
+        fill_price_mode: next_open
+      crypto_spot:
+        fee_bps: 10
+        slippage_bps: 6
+        impact_bps: 1.0
+        delay_bars: 1
+        fill_price_mode: next_open
+      cn_equity:
+        fee_bps: 8
+        slippage_bps: 6
+        impact_bps: 0.8
+        delay_bars: 1
+        fill_price_mode: next_open
+      us_equity:
+        fee_bps: 2
+        slippage_bps: 4
+        impact_bps: 0.6
+        delay_bars: 1
+        fill_price_mode: next_open
+  sizing:
+    uncertainty_scale: 12.0
+    fallback_half_width_pct: 0.01
+    confidence_power: 1.0
+  risk_scale:
+    by_level:
+      low: 1.0
+      medium: 0.8
+      high: 0.6
+      extreme: 0.4
+    by_volatility:
+      enabled: false
+      bands:
+      - 0.02
+      - 0.05
+      - 0.1
+      scales:
+      - 1.0
+      - 0.8
+      - 0.6
+      - 0.4
+  market_rules:
+    crypto:
+      allow_short_perp: true
+      allow_short_spot: false
+      allow_short_default: true
+    cn_equity:
+      allow_short: false
+    us_equity:
+      allow_short: true
+  news_gate:
+    enabled: true
+    negative_score_2h: -0.25
+    positive_score_2h: 0.25
+    burst_zscore: 1.5
+    score_30m_extreme: 0.4
+    count_30m_extreme: 3
+    risk_scale_by_level:
+      low: 1.0
+      medium: 0.85
+      high: 0.7
+market_snapshot:
+  enabled: true
+  output_csv: data/processed/market_snapshot.csv
+  output_json: data/processed/market_snapshot.json
+  instruments:
+  - id: btc
+    name: BTC/USDT
+    market: crypto
+    provider: binance
+    symbol: BTCUSDT
+    timezone: Asia/Shanghai
+    horizon_unit: hour
+    horizon_steps: 4
+    history_lookback_days: 1825
+  - id: aapl
+    name: AAPL
+    market: us_equity
+    provider: yahoo
+    symbol: AAPL
+    timezone: America/New_York
+    horizon_unit: day
+    horizon_steps: 3
+    history_lookback_days: 1825
+  - id: moutai
+    name: 贵州茅台
+    market: cn_equity
+    provider: yahoo
+    symbol: 600519.SS
+    timezone: Asia/Shanghai
+    horizon_unit: day
+    horizon_steps: 3
+    history_lookback_days: 1825
+tracking:
+  enabled: true
+  output_dir: data/processed/tracking
+  snapshot_workers: 8
+  universes:
+    us_equity:
+    - sp500
+  max_symbols_per_pool:
+    crypto: 10
+    cn_equity: 10
+    us_equity: 10
+  market_defaults:
+    crypto:
+      timezone: Asia/Shanghai
+      horizon_unit: hour
+      horizon_steps: 4
+      history_lookback_days: 1825
+    cn_equity:
+      timezone: Asia/Shanghai
+      horizon_unit: day
+      horizon_steps: 3
+      history_lookback_days: 1825
+    us_equity:
+      timezone: America/New_York
+      horizon_unit: day
+      horizon_steps: 3
+      history_lookback_days: 1825
+  hard_filters:
+    min_history_bars: 180
+    max_missing_rate: 0.05
+    min_market_cap_usd: 1000000000
+  action_rules:
+    min_predicted_change_pct: 0.0
+    min_factor_support_count: 2
+news:
+  enabled: true
+  markets:
+  - crypto
+  - us_equity
+  - cn_equity
+  providers:
+  - alpha_vantage
+  - newsapi
+  - gdelt
+  - finnhub
+  - marketaux
+  - bybit_announcements
+  - binance_rss
+  - sec_atom
+  output_dir: data/processed/news
+  raw_output_csv: data/processed/news/news_raw.csv
+  raw_output_parquet: data/processed/news/news_raw.parquet
+  status_output_json: data/processed/news/news_ingestion_status.json
+  status_output_csv: data/processed/news/news_ingestion_status.csv
+  features_output_csv: data/processed/news/news_features_hourly.csv
+  features_output_parquet: data/processed/news/news_features_hourly.parquet
+  latest_output_csv: data/processed/news/news_features_latest.csv
+  latest_output_json: data/processed/news/news_features_latest.json
+  timeout_sec: 15
+  max_retries: 2
+  backoff_sec: 1.2
+  provider_limit_per_symbol: 20
+  retention_days: 45
+  max_rows_total: 200000
+  dedup_simhash_distance: 3
+  max_symbols_per_market:
+    crypto: 20
+    us_equity: 20
+    cn_equity: 20
+  source_tier_by_provider:
+    alpha_vantage: tier1
+    newsapi: tier2
+    gdelt: tier3
+    finnhub: tier1
+    marketaux: tier2
+    bybit_announcements: tier1
+    binance_rss: tier1
+    sec_atom: tier1
+  source_tier_weights:
+    tier1: 1.0
+    tier2: 0.7
+    tier3: 0.4
+  api_keys:
+    alpha_vantage: ALPHA_VANTAGE_API_KEY
+    newsapi: NEWSAPI_API_KEY
+    finnhub: FINNHUB_API_KEY
+    marketaux: MARKETAUX_API_KEY
+  rss_feeds:
+  - https://www.binance.com/en/support/announcement/rss
+  feature_windows_minutes:
+  - 30
+  - 120
+  - 1440
+  decay_tau_minutes: 360
+  grid_lookback_days: 30
+  gate:
+    enabled: true
+    negative_score_2h: -0.25
+    positive_score_2h: 0.25
+    burst_zscore: 1.5
+    score_30m_extreme: 0.4
+    count_30m_extreme: 3
+forecast_config:
+  trend_labels:
+    p_bull: 0.55
+    p_bear: 0.45
+    ret_threshold: 0.002
+  confidence_score:
+    w_prob: 0.6
+    w_width: 0.4
+    w_recent_perf: 0.0
+  session_aggregation:
+    method: weighted_mean
+    weight_field: confidence_score
+  hourly:
+    horizon_hours: 4
+  daily:
+    lookforward_days: 14
+  seasonality:
+    window_days: 180
+  build_modes:
+  - forecast
+  - seasonality
+  symbols:
+    default:
+    - BTCUSDT
+    - ETHUSDT
+    - SOLUSDT
+  data_source:
+    exchanges:
+    - binance
+    - bybit
+    market_types:
+    - perp
+    - spot
+    default_exchange: binance
+    default_market_type: perp
+    binance_spot_endpoints:
+    - https://api.binance.com
+    - https://api.binance.us
+    binance_perp_endpoints:
+    - https://fapi.binance.com
+data_gate:
+  enabled: true
+  fail_fast: true
+  max_missing_rate: 0.05
+  max_duplicate_ratio: 0.0
+  require_monotonic_timestamp: true
+  allow_future_timestamps: false
+  require_ohlc_validity: true
+  min_history_bars:
+    hourly: 1800
+    daily: 500
+training:
+  lookback_days: 1825
+  fallback_min_days: 1095
+  freeze_test_months: 6
+  retrain_schedule: weekly
+  publish_mode: frozen_version
+  holdout:
+    enabled: true
+    ratio: 0.1
+    min_rows: 60
+  calibration:
+    ratio: 0.2
+  hpo:
+    enabled: false
+    coarse_trials: 4
+    fine_trials: 2
+    validation_ratio: 0.2
+    max_horizons_per_branch: 1
+    max_train_rows: 6000
+    random_state: 42
+    owner: youka
+    space_version: hpo_v1
+    param_space:
+      n_estimators:
+      - 120
+      - 240
+      - 360
+      learning_rate:
+      - 0.01
+      - 0.03
+      - 0.05
+      - 0.08
+      num_leaves:
+      - 31
+      - 63
+      - 127
+      subsample:
+      - 0.7
+      - 0.8
+      - 1.0
+      colsample_bytree:
+      - 0.7
+      - 0.8
+      - 1.0
+      reg_alpha:
+      - 0.0
+      - 0.1
+      - 0.5
+      reg_lambda:
+      - 0.0
+      - 0.1
+      - 1.0
+  use_hpo_best_for_training: true
+cost_stress:
+  enabled: true
+  fee_bps_grid:
+  - 2
+  - 5
+  - 10
+  slippage_bps_grid:
+  - 1
+  - 3
+  - 8
+  delay_bars_grid:
+  - 0
+  - 1
+  - 2
+  strategy: policy
+monitoring:
+  drift:
+    metric_alerts:
+      yellow: 0.1
+      orange: 0.25
+      red: 0.4
+    data_alerts:
+      yellow: 0.1
+      orange: 0.2
+      red: 0.35
+  retirement:
+    consecutive_non_positive_limit: 3
+    allow_red_alerts: 0
+decision:
+  confidence_min: 60.0
+  entry_band_pct:
+    crypto: 0.0015
+    cn_equity: 0.001
+    us_equity: 0.001
+    default: 0.0012
+  consistency:
+    enabled: true
+    ewma_span_bars: 4
+    delta_p_threshold: 0.05
+    delta_edge_bps_threshold: 4.0
+    cooldown_bars: 1
+    min_hold_bars: 1
+    hysteresis:
+      p_bull_exit: 0.52
+      p_bear_exit: 0.48
+data_quality:
+  max_missing_rate: 0.05
+  outlier_detection:
+    enabled: true
+    return_abs_quantile: 0.999
+    action: downweight
+split:
+  method: purged_walk_forward
+  gap_bars: auto
+  n_splits_intraday: 6
+  n_splits_daily: 5
+training_stability:
+  enabled: true
+  output_dir: experiments/stability_training
+  base_seed: 42
+  seed_step: 17
+  run_profile:
+    full_symbol_runs: 5
+    core_market_runs: 50
+    core_symbol_runs: 50
+    min_runs_before_stop: 10
+  full_universe:
+    enabled: true
+    use_cached_ranked_universe: false
+    markets:
+    - crypto
+    - cn_equity
+    - us_equity
+    pools:
+      crypto:
+      - top3
+      cn_equity:
+      - csi300
+      us_equity:
+      - sp500
+    max_symbols_per_market:
+      crypto: 0
+      cn_equity: 0
+      us_equity: 0
+  core_markets:
+    enabled: true
+    definitions:
+    - name: crypto_core
+      market: crypto
+      pools:
+      - top3
+    - name: cn_core
+      market: cn_equity
+      pools:
+      - csi300
+    - name: us_core
+      market: us_equity
+      pools:
+      - sp500
+  core_symbols:
+    enabled: true
+    symbols:
+    - BTCUSDT
+    - ETHUSDT
+    - SOLUSDT
+  stop_criteria:
+    metric_window: 10
+    volatility_threshold_pct: 5.0
+    max_flip_rate: 0.2
+    min_net_return_delta: -0.02
+    max_drawdown_delta: 0.02
+  execution:
+    symbol_pipeline:
+    - src.ingestion.update_data
+    - src.preprocessing.validate_data
+    - src.features.build_features
+    - src.labels.build_labels
+    - src.split.build_folds
+    - src.models.train
+    - src.models.calibrate
+    - src.models.predict
+    - src.evaluation.walk_forward
+    - src.evaluation.backtest
+    market_pipeline:
+    - src.markets.tracking
+    - src.markets.snapshot
+    - src.models.generate_policy_signals
+    - src.evaluation.backtest_multi_market
+  overrides:
+    disable_hpo_for_repeats: true
+    disable_binance_us_for_history: true
+    run_backtest_multi_market_for_symbol_tier: false
+gate:
+  min_history_days: 1825
+  allow_fallback_3y: true
+kill_switch:
+  enabled: true
+  env_var: DISABLE_TRADING
+  recovery_health_checks_required: 3
+  trial_position_scale: 0.25
+  trial_windows: 1
+  admin_role: ops_admin
+  operator_role_env: TRADING_OPERATOR_ROLE
+reporting:
+  thresholds_file: configs/go_live_thresholds.yaml
+  fill_price_mode: next_open
+  cost_profile: dynamic_v1

@@ -100,3 +100,5 @@ True,False,core_market_crypto_core_048,core_market,core_market::crypto_core,48,,
 True,False,core_market_crypto_core_049,core_market,core_market::crypto_core,49,,,,,,,False,False,False
 True,False,core_market_crypto_core_050,core_market,core_market::crypto_core,50,,,,,,,False,False,False
 False,False,core_market_us_core_001,core_market,core_market::us_core,1,,,,,,,,,
+False,False,core_market_us_core_002,core_market,core_market::us_core,2,,,,,,,,,
+False,False,core_market_us_core_003,core_market,core_market::us_core,3,,,,,,,,,
