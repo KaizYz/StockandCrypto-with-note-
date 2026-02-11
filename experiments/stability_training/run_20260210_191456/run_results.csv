@@ -17,3 +17,7 @@ core_symbol_BTCUSDT_015,core_symbol,core_symbol::BTCUSDT,15,50,280,crypto,BTCUSD
 core_symbol_BTCUSDT_016,core_symbol,core_symbol::BTCUSDT,16,50,297,crypto,BTCUSDT,binance,failed,FileNotFoundError: [Errno 2] No such file or directory: 'experiments\\stability_training\\run_20260210_191456\\runs\\core_symbol_BTCUSDT_016\\logs\\src_models_train.log',,,,,,
 core_symbol_BTCUSDT_017,core_symbol,core_symbol::BTCUSDT,17,50,314,crypto,BTCUSDT,binance,success,,0.5155755174081618,,,,,
 core_symbol_BTCUSDT_018,core_symbol,core_symbol::BTCUSDT,18,50,331,crypto,BTCUSDT,binance,success,,0.5429151365911942,,,,,
+core_symbol_BTCUSDT_019,core_symbol,core_symbol::BTCUSDT,19,50,348,crypto,BTCUSDT,binance,success,,0.5430396153254581,,,,,
+core_symbol_BTCUSDT_020,core_symbol,core_symbol::BTCUSDT,20,50,365,crypto,BTCUSDT,binance,success,,0.5347421898447204,,,,,
+core_symbol_BTCUSDT_021,core_symbol,core_symbol::BTCUSDT,21,50,382,crypto,BTCUSDT,binance,success,,0.5456396242094371,,,,,
+core_symbol_BTCUSDT_022,core_symbol,core_symbol::BTCUSDT,22,50,399,crypto,BTCUSDT,binance,success,,0.5272282153337771,,,,,

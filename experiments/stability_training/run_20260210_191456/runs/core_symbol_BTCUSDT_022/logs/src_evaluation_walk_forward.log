@@ -1,0 +1,16 @@
+$ C:\Users\youka\AppData\Local\Python\pythoncore-3.14-64\python.exe -m src.evaluation.walk_forward --config experiments\stability_training\run_20260210_191456\runs\core_symbol_BTCUSDT_022\config_runtime.yaml
+
+[stdout]
+[OK] Saved walk-forward metrics -> data\processed\metrics_walk_forward.csv
+
+
+[stderr]
+C:\Users\youka\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\xgboost\core.py:774: UserWarning: [17:54:29] WARNING: C:\actions-runner\_work\xgboost\xgboost\src\common\error_msg.cc:62: Falling back to prediction using DMatrix due to mismatched devices. This might lead to higher memory usage and slower performance. XGBoost is running on: cuda:0, while the input data is on: cpu.
+Potential solutions:
+- Use a data structure that matches the device ordinal in the booster.
+- Set the device for booster before call to inplace_predict.
+
+This warning will only be shown once.
+
+  return func(**kwargs)
+

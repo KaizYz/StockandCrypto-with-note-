@@ -1,0 +1,9 @@
+$ C:\Users\youka\AppData\Local\Python\pythoncore-3.14-64\python.exe -m src.features.build_features --config experiments\stability_training\run_20260210_191456\runs\core_symbol_BTCUSDT_020\config_runtime.yaml
+
+[stdout]
+[OK] Saved features -> data\processed\features_hourly.csv
+[OK] Saved features -> data\processed\features_daily.csv
+
+
+[stderr]
+
