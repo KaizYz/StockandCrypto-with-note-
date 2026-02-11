@@ -1,0 +1,13 @@
+$ C:\Users\youka\AppData\Local\Python\pythoncore-3.14-64\python.exe -m src.ingestion.update_data --config experiments\stability_training\run_20260210_191456\runs\core_symbol_BTCUSDT_030\config_runtime.yaml
+
+[stdout]
+[WARN] Binance fetch failed for hourly: 451 Client Error:  for url: https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1h&startTime=1613091600000&endTime=1770771600000&limit=1000. Falling back to synthetic data.
+[OK] Saved hourly raw data -> data\raw\btcusdt_hourly.csv
+[OK] Saved quality report -> data\processed\data_quality_report_hourly.json
+[WARN] Binance fetch failed for daily: 451 Client Error:  for url: https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1d&startTime=1613091600000&endTime=1770771600000&limit=1000. Falling back to synthetic data.
+[OK] Saved daily raw data -> data\raw\btcusdt_daily.csv
+[OK] Saved quality report -> data\processed\data_quality_report_daily.json
+
+
+[stderr]
+

@@ -116,3 +116,25 @@ core_market_us_core_014,core_market,core_market::us_core,14,50,263,us_equity,us_
 core_market_us_core_015,core_market,core_market::us_core,15,50,280,us_equity,us_core,nan,success,,,,,,-0.0060696087552827875,-0.01557325687544529
 core_market_us_core_016,core_market,core_market::us_core,16,50,297,us_equity,us_core,nan,success,,,,,,-0.006076362551214288,-0.01569990970974865
 core_market_us_core_017,core_market,core_market::us_core,17,50,314,us_equity,us_core,nan,success,,,0.26368223420737685,0.7420373155404164,,-0.006050737318468537,-0.015771296199426223
+core_market_us_core_018,core_market,core_market::us_core,18,50,331,us_equity,us_core,nan,success,,,,,0.12044989561565733,-0.006050737318468537,-0.015771296199426223
+core_market_us_core_019,core_market,core_market::us_core,19,50,348,us_equity,us_core,nan,success,,,,,,-0.006050737318468537,-0.015771296199426223
+core_market_us_core_020,core_market,core_market::us_core,20,50,365,us_equity,us_core,nan,success,,,,,,-0.006050737318468537,-0.015771296199426223
+core_market_us_core_021,core_market,core_market::us_core,21,50,382,us_equity,us_core,nan,success,,,0.25094524869328094,0.7395075861404489,0.2850456861748426,-0.006050737318468537,-0.015771296199426223
+core_market_us_core_022,core_market,core_market::us_core,22,50,399,us_equity,us_core,nan,success,,,,,,-0.006050737318468537,-0.015771296199426223
+core_market_us_core_023,core_market,core_market::us_core,23,50,416,us_equity,us_core,nan,success,,,,,,-0.006050737318468537,-0.015771296199426223
+core_market_us_core_024,core_market,core_market::us_core,24,50,433,us_equity,us_core,nan,success,,,0.25237508763125865,0.7610892631853693,,-0.006050737318468537,-0.015771296199426223
+core_market_us_core_025,core_market,core_market::us_core,25,50,450,us_equity,us_core,nan,success,,,,,0.21172619998934528,-0.006050737318468537,-0.015771296199426223
+core_market_us_core_026,core_market,core_market::us_core,26,50,467,us_equity,us_core,nan,success,,,,,,-0.006050737318468537,-0.015771296199426223
+core_market_us_core_027,core_market,core_market::us_core,27,50,484,us_equity,us_core,nan,success,,,0.2565522536612525,0.74262167905655,,-0.006050737318468537,-0.015771296199426223
+core_market_us_core_028,core_market,core_market::us_core,28,50,501,us_equity,us_core,nan,success,,,,,0.08370419616245345,-0.006050737318468537,-0.015771296199426223
+core_market_us_core_029,core_market,core_market::us_core,29,50,518,us_equity,us_core,nan,success,,,,,,-0.006050737318468537,-0.015771296199426223
+core_market_us_core_030,core_market,core_market::us_core,30,50,535,us_equity,us_core,nan,success,,,0.2562466565071423,0.7521942840761192,,-0.006050737318468537,-0.015771296199426223
+core_market_us_core_031,core_market,core_market::us_core,31,50,552,us_equity,us_core,nan,success,,,,,0.18982870763692034,-0.006050737318468537,-0.015771296199426223
+core_market_us_core_032,core_market,core_market::us_core,32,50,569,us_equity,us_core,nan,success,,,,,,-0.006050737318468537,-0.015771296199426223
+core_market_us_core_033,core_market,core_market::us_core,33,50,586,us_equity,us_core,nan,success,,,0.2517173567134116,0.7175851045953746,,-0.006050737318468537,-0.015771296199426223
+core_market_us_core_034,core_market,core_market::us_core,34,50,603,us_equity,us_core,nan,success,,,,,0.2576606994652205,-0.006050737318468537,-0.015771296199426223
+core_market_us_core_035,core_market,core_market::us_core,35,50,620,us_equity,us_core,nan,success,,,,,,-0.006050737318468537,-0.015771296199426223
+core_market_us_core_036,core_market,core_market::us_core,36,50,637,us_equity,us_core,nan,success,,,0.25064084159799566,0.7465215139944439,,-0.006050737318468537,-0.015771296199426223
+core_market_us_core_037,core_market,core_market::us_core,37,50,654,us_equity,us_core,nan,success,,,,,0.22376396456019382,-0.006050737318468537,-0.015771296199426223
+core_market_us_core_038,core_market,core_market::us_core,38,50,671,us_equity,us_core,nan,failed,FileNotFoundError: [Errno 2] No such file or directory: 'experiments\\stability_training\\run_20260210_191558\\runs\\core_market_us_core_038\\logs\\src_evaluation_backtest_multi_market.log',,,,,,
+core_market_us_core_039,core_market,core_market::us_core,39,50,688,us_equity,us_core,nan,success,,,,,,-0.006050737318468537,-0.015771296199426223
