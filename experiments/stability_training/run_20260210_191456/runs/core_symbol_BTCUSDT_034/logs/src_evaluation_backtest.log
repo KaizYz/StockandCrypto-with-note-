@@ -1,0 +1,8 @@
+$ C:\Users\youka\AppData\Local\Python\pythoncore-3.14-64\python.exe -m src.evaluation.backtest --config experiments\stability_training\run_20260210_191456\runs\core_symbol_BTCUSDT_034\config_runtime.yaml
+
+[stdout]
+[OK] Saved backtest metrics -> data\processed\backtest_metrics.csv
+
+
+[stderr]
+
