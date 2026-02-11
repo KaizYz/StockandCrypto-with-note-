@@ -479,6 +479,10 @@
     {
       "eligible": true,
       "should_stop": false,
+      "task_id": "core_symbol_BTCUSDT_032",
+      "tier": "core_symbol",
+      "group_key": "core_symbol::BTCUSDT",
+      "run_index": 32,
       "auc_cv_pct": 2.526141495005651,
       "brier_cv_pct": NaN,
       "coverage_cv_pct": NaN,
@@ -486,4 +490,18 @@
       "ret_delta": NaN,
       "dd_delta": NaN,
       "metrics_ok": false,
-      "flip_ok": 
+      "flip_ok": false,
+      "perf_ok": false
+    },
+    {
+      "eligible": true,
+      "should_stop": false,
+      "auc_cv_pct": 2.7710474220188295,
+      "brier_cv_pct": NaN,
+      "coverage_cv_pct": NaN,
+      "flip_mean": 0.33417840815279365,
+      "ret_delta": NaN,
+      "dd_delta": NaN,
+      "metrics_ok": false,
+      "flip_ok": false,
+      "perf_ok": 

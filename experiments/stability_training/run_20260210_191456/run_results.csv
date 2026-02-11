@@ -31,3 +31,4 @@ core_symbol_BTCUSDT_029,core_symbol,core_symbol::BTCUSDT,29,50,518,crypto,BTCUSD
 core_symbol_BTCUSDT_030,core_symbol,core_symbol::BTCUSDT,30,50,535,crypto,BTCUSDT,binance,success,,0.5440806860760377,,,,,
 core_symbol_BTCUSDT_031,core_symbol,core_symbol::BTCUSDT,31,50,552,crypto,BTCUSDT,binance,success,,0.5610325718669753,,,,,
 core_symbol_BTCUSDT_032,core_symbol,core_symbol::BTCUSDT,32,50,569,crypto,BTCUSDT,binance,success,,0.5287576732862828,,,,,
+core_symbol_BTCUSDT_033,core_symbol,core_symbol::BTCUSDT,33,50,586,crypto,BTCUSDT,binance,success,,0.5137242445028551,0.2548805163985116,0.7446282733659749,0.33417840815279365,0.013950939769465933,-0.00538843569173885
