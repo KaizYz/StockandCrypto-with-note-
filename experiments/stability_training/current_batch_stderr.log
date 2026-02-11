@@ -88,3 +88,11 @@ E:\StockandCrypto\src\models\train_stability_batch.py:584: RuntimeWarning: Mean 
   cur_ret = _safe_float(np.nanmean([_safe_float(r.get("net_return")) for r in tail]))
 E:\StockandCrypto\src\models\train_stability_batch.py:585: RuntimeWarning: Mean of empty slice
   cur_dd = _safe_float(np.nanmean([_safe_float(r.get("max_drawdown")) for r in tail]))
+E:\StockandCrypto\src\models\train_stability_batch.py:569: RuntimeWarning: Mean of empty slice
+  flip_mean = _safe_float(np.nanmean([_safe_float(r.get("signal_flip_rate")) for r in tail]))
+E:\StockandCrypto\src\models\train_stability_batch.py:569: RuntimeWarning: Mean of empty slice
+  flip_mean = _safe_float(np.nanmean([_safe_float(r.get("signal_flip_rate")) for r in tail]))
+E:\StockandCrypto\src\models\train_stability_batch.py:569: RuntimeWarning: Mean of empty slice
+  flip_mean = _safe_float(np.nanmean([_safe_float(r.get("signal_flip_rate")) for r in tail]))
+E:\StockandCrypto\src\models\train_stability_batch.py:569: RuntimeWarning: Mean of empty slice
+  flip_mean = _safe_float(np.nanmean([_safe_float(r.get("signal_flip_rate")) for r in tail]))
