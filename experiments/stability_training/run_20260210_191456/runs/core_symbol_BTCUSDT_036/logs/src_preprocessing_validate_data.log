@@ -1,0 +1,8 @@
+$ C:\Users\youka\AppData\Local\Python\pythoncore-3.14-64\python.exe -m src.preprocessing.validate_data --config experiments\stability_training\run_20260210_191456\runs\core_symbol_BTCUSDT_036\config_runtime.yaml
+
+[stdout]
+[OK] saved data integrity checks -> data\processed\data_integrity_checks.json
+
+
+[stderr]
+

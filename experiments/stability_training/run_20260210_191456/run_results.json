@@ -638,13 +638,32 @@
       "symbol": "BTCUSDT",
       "provider": "binance",
       "status": "success",
-      "error": "",
+      "error": NaN,
       "auc": 0.5373449866215494,
       "brier": 0.2529525742814351,
       "coverage": 0.6876197025179089,
-      "signal_flip_rate": 0.11650950934952853,
-      "net_return": 0.24015244908011443,
-      "max_drawdown": -0.013876733177135767
+      "signal_flip_rate": 0.1165095093495285,
+      "net_return": 0.2401524490801144,
+      "max_drawdown": -0.0138767331771357
+    },
+    {
+      "task_id": "core_symbol_BTCUSDT_035",
+      "tier": "core_symbol",
+      "group_key": "core_symbol::BTCUSDT",
+      "run_index": 35,
+      "total_runs": 50,
+      "seed": 620,
+      "market": "crypto",
+      "symbol": "BTCUSDT",
+      "provider": "binance",
+      "status": "success",
+      "error": "",
+      "auc": 0.5171125464286024,
+      "brier": 0.25785654610471226,
+      "coverage": 0.716575072852398,
+      "signal_flip_rate": 0.3098417241361354,
+      "net_return": 0.057125588511723835,
+      "max_drawdown": -0.0061558498632244335
     }
   ]
 }

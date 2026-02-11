@@ -29,4 +29,5 @@ True,False,core_symbol_BTCUSDT_030,core_symbol,core_symbol::BTCUSDT,30,2.0536524
 True,False,core_symbol_BTCUSDT_031,core_symbol,core_symbol::BTCUSDT,31,2.5619305763858744,,,,,,False,False,False
 True,False,core_symbol_BTCUSDT_032,core_symbol,core_symbol::BTCUSDT,32,2.526141495005651,,,,,,False,False,False
 True,False,core_symbol_BTCUSDT_033,core_symbol,core_symbol::BTCUSDT,33,2.771047422018829,,,0.3341784081527936,,,False,False,False
-True,False,core_symbol_BTCUSDT_034,core_symbol,core_symbol::BTCUSDT,34,2.7744230171808155,0.3796409002208138,3.980356181888424,0.22534395875116106,,,True,False,False
+True,False,core_symbol_BTCUSDT_034,core_symbol,core_symbol::BTCUSDT,34,2.7744230171808155,0.3796409002208138,3.980356181888424,0.225343958751161,,,True,False,False
+True,False,core_symbol_BTCUSDT_035,core_symbol,core_symbol::BTCUSDT,35,2.9273815570171906,0.7903548695128262,3.2494005976290334,0.2535098805461525,,,True,False,False
