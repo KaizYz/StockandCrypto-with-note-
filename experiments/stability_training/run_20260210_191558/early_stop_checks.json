@@ -2264,6 +2264,40 @@
       "tier": "core_market",
       "group_key": "core_market::us_core",
       "run_index": 41
+    },
+    {
+      "eligible": true,
+      "should_stop": false,
+      "auc_cv_pct": NaN,
+      "brier_cv_pct": 0.4542631071855396,
+      "coverage_cv_pct": 1.7981989400628013,
+      "flip_mean": 0.26800766766952006,
+      "ret_delta": 0.0,
+      "dd_delta": 0.0,
+      "metrics_ok": false,
+      "flip_ok": false,
+      "perf_ok": true,
+      "task_id": "core_market_us_core_042",
+      "tier": "core_market",
+      "group_key": "core_market::us_core",
+      "run_index": 42
+    },
+    {
+      "eligible": true,
+      "should_stop": false,
+      "auc_cv_pct": NaN,
+      "brier_cv_pct": 0.4000985564370751,
+      "coverage_cv_pct": 1.7906378316886178,
+      "flip_mean": 0.2680076676695201,
+      "ret_delta": 0.0,
+      "dd_delta": 0.0,
+      "metrics_ok": false,
+      "flip_ok": false,
+      "perf_ok": true,
+      "task_id": "core_market_us_core_043",
+      "tier": "core_market",
+      "group_key": "core_market::us_core",
+      "run_index": 43
     }
   ]
 }
