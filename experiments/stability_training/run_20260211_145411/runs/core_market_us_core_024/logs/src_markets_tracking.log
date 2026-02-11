@@ -1,0 +1,8 @@
+$ C:\Users\youka\AppData\Local\Python\pythoncore-3.14-64\python.exe -m src.markets.tracking --config experiments\stability_training\run_20260211_145411\runs\core_market_us_core_024\config_runtime.yaml
+
+[stdout]
+[OK] Saved tracking outputs -> data\processed\tracking
+
+
+[stderr]
+
