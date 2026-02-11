@@ -107,3 +107,5 @@ False,False,core_market_us_core_005,core_market,core_market::us_core,5,,,,,,,,,
 False,False,core_market_us_core_006,core_market,core_market::us_core,6,,,,,,,,,
 False,False,core_market_us_core_007,core_market,core_market::us_core,7,,,,,,,,,
 False,False,core_market_us_core_008,core_market,core_market::us_core,8,,,,,,,,,
+False,False,core_market_us_core_009,core_market,core_market::us_core,9,,,,,,,,,
+True,False,core_market_us_core_010,core_market,core_market::us_core,10,,,,,,,False,False,True
