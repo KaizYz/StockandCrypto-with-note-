@@ -5049,7 +5049,7 @@ def _render_projection_chart(
     q10_price = float(current_price * (1.0 + q10_change_pct))
     q50_price = float(current_price * (1.0 + q50_change_pct))
     q90_price = float(current_price * (1.0 + q90_change_pct))
-    x = ["现在", expected_date_label if expected_date_label else "预期日期"]
+    x = [_t("现在", "Now"), expected_date_label if expected_date_label else _t("预期日期", "Expected Date")]
 
     fig = go.Figure()
     fig.add_trace(
@@ -5086,8 +5086,8 @@ def _render_projection_chart(
     )
     fig.update_layout(
         title=title,
-        xaxis_title="时间",
-        yaxis_title="价格",
+        xaxis_title=_t("时间", "Time"),
+        yaxis_title=_t("价格", "Price"),
         template="plotly_white",
         height=320,
         legend=dict(orientation="h"),
@@ -7064,13 +7064,13 @@ def _render_symbol_backtest_section(
         )
 
     show = sub.copy()
-    show["策略"] = show["strategy"].map(
+    show[_t("策略", "Strategy")] = show["strategy"].map(
         {
-            "policy": "策略信号",
-            "buy_hold": "买入并持有",
-            "ma_crossover": "均线交叉",
-            "naive_prev_bar": "前一日方向",
-            "lux_machine_supertrend": "机器学习自适应SuperTrend",
+            "policy": _t("策略信号", "Policy Signal"),
+            "buy_hold": _t("买入并持有", "Buy & Hold"),
+            "ma_crossover": _t("均线交叉", "MA Crossover"),
+            "naive_prev_bar": _t("前一日方向", "Previous-Day Direction"),
+            "lux_machine_supertrend": _t("机器学习自适应SuperTrend", "ML Adaptive SuperTrend"),
         }
     ).fillna(show["strategy"])
     show["总收益"] = show["total_return"].map(_format_change_pct)
@@ -7079,7 +7079,7 @@ def _render_symbol_backtest_section(
     show["胜率"] = show["win_rate"].map(lambda x: _format_change_pct(x).replace("+", ""))
     show["盈亏比"] = show["avg_win_loss_ratio"].map(lambda x: _format_float(x, 2))
     show["PF"] = show["profit_factor"].map(lambda x: _format_float(x, 2))
-    show_cols = ["策略", "总收益", "夏普", "最大回撤", "胜率", "盈亏比", "PF"]
+    show_cols = [_t("策略", "Strategy"), "总收益", "夏普", "最大回撤", "胜率", "盈亏比", "PF"]
     st.dataframe(show[show_cols], use_container_width=True, hide_index=True)
 
     cmp = compare[
