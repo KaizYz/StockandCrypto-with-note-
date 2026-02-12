@@ -71,6 +71,60 @@ def _t(zh_text: str, en_text: str) -> str:
     return zh_text if _ui_lang() == "zh" else en_text
 
 
+def _ui_timezone() -> str:
+    """Returns the timezone name string based on user selection or dynamic default."""
+    # We'll use session state to track if the user manually changed it.
+    # Otherwise, we'll return a sensible default based on the current page/market.
+    sel = st.session_state.get("ui_timezone_selection", "Auto")
+    if sel == "Beijing":
+        return "Asia/Shanghai"
+    if sel == "New York":
+        return "America/New_York"
+    
+    # Auto logic: 
+    # If on CN A-share Page -> Beijing
+    # If on Crypto or US Equity -> New York
+    # We can peek at st.session_state.get("current_page") if we set it later, 
+    # but for now let's check the radio choice in sidebar if it's already rendered,
+    # or just look at the radio options if we are in the main loop.
+    # A simpler way is to just use what's in session state.
+    page = st.session_state.get("page_choice_internal", "")
+    if "CN A-share" in page:
+        return "Asia/Shanghai"
+    return "America/New_York"
+
+
+def _ui_timezone_label() -> str:
+    """Returns a label like '北京时间' or '纽约时间' or 'Beijing Time' etc."""
+    tz = _ui_timezone()
+    if tz == "Asia/Shanghai":
+        return _t("北京时间", "Beijing Time")
+    return _t("纽约时间", "New York Time")
+
+
+def _fmt_ts_for_ui(ts_str: object) -> str:
+    """Format a timestamp string into the currently selected UI timezone.
+
+    Accepts strings or pandas/NumPy timestamps; falls back gracefully if parsing fails.
+    """
+    if ts_str is None:
+        return "-"
+    s = str(ts_str).strip()
+    if not s or s == "-":
+        return "-"
+    try:
+        ts = pd.to_datetime(s, errors="coerce", utc=True)
+    except Exception:
+        ts = pd.NaT
+    if not (pd.notna(ts)):
+        return s
+    try:
+        ts_local = ts.tz_convert(_ui_timezone())
+        return ts_local.strftime("%Y-%m-%d %H:%M:%S %z")
+    except Exception:
+        return s
+
+
 @st.cache_data(ttl=180, show_spinner=False)
 def _load_backtest_artifacts(processed_dir_str: str) -> Dict[str, pd.DataFrame]:
     root = Path(processed_dir_str) / "backtest"
@@ -3956,8 +4010,8 @@ def _render_crypto_session_page() -> None:
         st.warning(_t(f"请求模式是 `{mode}`，当前自动降级为 `{mode_actual}`。", f"Requested mode `{mode}` downgraded to `{mode_actual}`."))
     st.caption(
         _t(
-            f"最新价格：{_format_price(meta.get('current_price'))} | 更新时间（北京时间）：{meta.get('data_updated_at_bj', '-')} | 模式/周期：{mode_actual} / {int(horizon_hours)}h",
-            f"Latest Price: {_format_price(meta.get('current_price'))} | Updated (Asia/Shanghai): {meta.get('data_updated_at_bj', '-')} | Mode/Horizon: {mode_actual} / {int(horizon_hours)}h",
+            f"最新价格：{_format_price(meta.get('current_price'))} | {_ui_timezone_label()}更新时间：{_fmt_ts_for_ui(meta.get('data_updated_at_bj', '-'))} | 模式/周期：{mode_actual} / {int(horizon_hours)}h",
+            f"Latest Price: {_format_price(meta.get('current_price'))} | Updated ({_ui_timezone_label()}): {_fmt_ts_for_ui(meta.get('data_updated_at_bj', '-'))} | Mode/Horizon: {mode_actual} / {int(horizon_hours)}h",
         )
     )
 
@@ -3974,16 +4028,16 @@ def _render_crypto_session_page() -> None:
             _t(
                 f"- 数据源：{meta.get('exchange_actual', '-')} / {meta.get('market_type', '-')} / {meta.get('symbol', '-')}\n"
                 f"- 请求数据源：{meta.get('exchange', '-')}\n"
-                f"- 数据更新时间（北京时间）：{meta.get('data_updated_at_bj', '-')}\n"
-                f"- 预测生成时间（北京时间）：{meta.get('forecast_generated_at_bj', '-')}\n"
+                f"- {_ui_timezone_label()}数据更新时间：{_fmt_ts_for_ui(meta.get('data_updated_at_bj', '-'))}\n"
+                f"- {_ui_timezone_label()}预测生成时间：{_fmt_ts_for_ui(meta.get('forecast_generated_at_bj', '-'))}\n"
                 f"- horizon={int(horizon_hours)}h / mode={mode_actual}\n"
                 f"- model_version：{meta.get('model_version', '-')}\n"
                 f"- data_version：{data_version}\n"
                 f"- git_hash：{_get_git_hash_short_cached()}",
                 f"- Source: {meta.get('exchange_actual', '-')} / {meta.get('market_type', '-')} / {meta.get('symbol', '-')}\n"
                 f"- Requested source: {meta.get('exchange', '-')}\n"
-                f"- Data updated (Asia/Shanghai): {meta.get('data_updated_at_bj', '-')}\n"
-                f"- Forecast generated (Asia/Shanghai): {meta.get('forecast_generated_at_bj', '-')}\n"
+                f"- Data updated ({_ui_timezone_label()}): {_fmt_ts_for_ui(meta.get('data_updated_at_bj', '-'))}\n"
+                f"- Forecast generated ({_ui_timezone_label()}): {_fmt_ts_for_ui(meta.get('forecast_generated_at_bj', '-'))}\n"
                 f"- horizon={int(horizon_hours)}h / mode={mode_actual}\n"
                 f"- model_version: {meta.get('model_version', '-')}\n"
                 f"- data_version: {data_version}\n"
@@ -4563,9 +4617,9 @@ def _render_index_session_page() -> None:
     st.caption(
         _t(
             f"指数：{index_name} | 最新价格：{_format_price(meta.get('current_price'))} | "
-            f"更新时间（北京时间）：{meta.get('data_updated_at_bj', '-')} | 模式/周期：{mode_actual} / {int(horizon_hours)}h | 有效交易时段：{active_session_label}",
+            f"{_ui_timezone_label()}更新时间：{_fmt_ts_for_ui(meta.get('data_updated_at_bj', '-'))} | 模式/周期：{mode_actual} / {int(horizon_hours)}h | 有效交易时段：{active_session_label}",
             f"Index: {index_name} | Latest Price: {_format_price(meta.get('current_price'))} | "
-            f"Updated (Asia/Shanghai): {meta.get('data_updated_at_bj', '-')} | Mode/Horizon: {mode_actual} / {int(horizon_hours)}h | Active session: {active_session_label}",
+            f"Updated ({_ui_timezone_label()}): {_fmt_ts_for_ui(meta.get('data_updated_at_bj', '-'))} | Mode/Horizon: {mode_actual} / {int(horizon_hours)}h | Active session: {active_session_label}",
         )
     )
 
@@ -9772,6 +9826,28 @@ div[data-testid="stMetricValue"] * {
         index=0 if _ui_lang() == "zh" else 1,
     )
     st.session_state["ui_lang"] = "zh" if lang_pick == "中文" else "en"
+
+    # Timezone selection: Auto/Beijing/New York
+    tz_options = [
+        _t("自动 (按页面市场)", "Auto (by market)"),
+        _t("北京时间", "Beijing Time"),
+        _t("纽约时间", "New York Time"),
+    ]
+    # Map internal keys to labels
+    tz_key_to_label = {
+        "Auto": tz_options[0],
+        "Beijing": tz_options[1],
+        "New York": tz_options[2],
+    }
+    tz_label_to_key = {v: k for k, v in tz_key_to_label.items()}
+    current_tz_key = st.session_state.get("ui_timezone_selection", "Auto")
+    current_tz_label = tz_key_to_label.get(current_tz_key, tz_options[0])
+    tz_pick = st.sidebar.selectbox(
+        _t("时区 / Timezone", "Timezone"),
+        options=tz_options,
+        index=tz_options.index(current_tz_label),
+    )
+    st.session_state["ui_timezone_selection"] = tz_label_to_key.get(tz_pick, "Auto")
     # Safe state sync for demo/live gate mode:
     # avoid writing the same widget key after instantiation in the same run.
     if "debug_ignore_no_go_pending" in st.session_state:
@@ -9849,6 +9925,7 @@ div[data-testid="stMetricValue"] * {
     ]
     page_labels = [x[1] for x in page_items]
     page_choice = st.sidebar.radio(_t("页面", "Page"), options=page_labels, index=0)
+    st.session_state["page_choice_internal"] = page_choice
     page_key = next((k for k, lbl in page_items if lbl == page_choice), "crypto")
 
     if page_key == "crypto":
