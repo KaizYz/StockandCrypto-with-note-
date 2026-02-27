@@ -12,17 +12,43 @@ from typing import Any
 
 import requests
 
-# 配置
-USE_SUPABASE = os.getenv("USE_SUPABASE", "false").lower() == "true"
+# 配置 - 支持 Streamlit Cloud secrets.toml 格式
+USE_SUPABASE = os.getenv("USE_SUPABASE", "").lower() == "true"
+if not USE_SUPABASE:
+    # 尝试从 Streamlit secrets 读取
+    try:
+        import toml
+        secrets_path = os.path.join(os.path.dirname(__file__), "..", ".streamlit", "secrets.toml")
+        if os.path.exists(secrets_path):
+            secrets = toml.load(secrets_path)
+            USE_SUPABASE = str(secrets.get("USE_SUPABASE", "")).lower() == "true"
+            if not SUPABASE_URL:
+                SUPABASE_URL = secrets.get("SUPABASE_URL", "")
+            if not SUPABASE_ANON_KEY:
+                SUPABASE_ANON_KEY = secrets.get("SUPABASE_ANON_KEY", "")
+    except Exception:
+        pass
+
 API_BASE = os.getenv("NOTES_API_URL", "http://127.0.0.1:5001").rstrip("/")
-SUPABASE_URL = os.getenv("SUPABASE_URL", "")
-SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", "")
+if not SUPABASE_URL:
+    SUPABASE_URL = os.getenv("SUPABASE_URL", "")
+if not SUPABASE_ANON_KEY:
+    SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", "")
+
+# 调试信息
+debug_info = {
+    "USE_SUPABASE": USE_SUPABASE,
+    "SUPABASE_URL_SET": bool(SUPABASE_URL),
+    "SUPABASE_ANON_KEY_SET": bool(SUPABASE_ANON_KEY),
+    "API_BASE": API_BASE
+}
 
 if not USE_SUPABASE and not API_BASE:
-    raise ValueError("请设置 NOTES_API_URL 环境变量或启用 USE_SUPABASE")
+    raise ValueError(f"请设置 NOTES_API_URL 环境变量或启用 USE_SUPABASE\n调试信息: {debug_info}")
 
 print(f"📦 Notes 模块启动模式: {'Supabase Cloud' if USE_SUPABASE else 'Local API'}")
-print(f"   API: {SUPABASE_URL if USE_SUPABASE else API_BASE}")
+print(f"   URL: {SUPABASE_URL[:30]}..." if SUPABASE_URL else "   URL: 未设置")
+print(f"   调试: {debug_info}")
 
 
 # ========== 统一 API 接口 ==========
