@@ -14,6 +14,9 @@ import requests
 
 # 配置 - 支持 Streamlit Cloud secrets.toml 格式
 USE_SUPABASE = os.getenv("USE_SUPABASE", "").lower() == "true"
+SUPABASE_URL = os.getenv("SUPABASE_URL", "")
+SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", "")
+
 if not USE_SUPABASE:
     # 尝试从 Streamlit secrets 读取
     try:
@@ -22,18 +25,12 @@ if not USE_SUPABASE:
         if os.path.exists(secrets_path):
             secrets = toml.load(secrets_path)
             USE_SUPABASE = str(secrets.get("USE_SUPABASE", "")).lower() == "true"
-            if not SUPABASE_URL:
-                SUPABASE_URL = secrets.get("SUPABASE_URL", "")
-            if not SUPABASE_ANON_KEY:
-                SUPABASE_ANON_KEY = secrets.get("SUPABASE_ANON_KEY", "")
+            SUPABASE_URL = secrets.get("SUPABASE_URL", SUPABASE_URL)
+            SUPABASE_ANON_KEY = secrets.get("SUPABASE_ANON_KEY", SUPABASE_ANON_KEY)
     except Exception:
         pass
 
 API_BASE = os.getenv("NOTES_API_URL", "http://127.0.0.1:5001").rstrip("/")
-if not SUPABASE_URL:
-    SUPABASE_URL = os.getenv("SUPABASE_URL", "")
-if not SUPABASE_ANON_KEY:
-    SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", "")
 
 # 调试信息
 debug_info = {
