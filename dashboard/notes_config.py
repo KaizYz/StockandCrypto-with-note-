@@ -32,20 +32,8 @@ if not USE_SUPABASE:
 
 API_BASE = os.getenv("NOTES_API_URL", "http://127.0.0.1:5001").rstrip("/")
 
-# 调试信息
-debug_info = {
-    "USE_SUPABASE": USE_SUPABASE,
-    "SUPABASE_URL_SET": bool(SUPABASE_URL),
-    "SUPABASE_ANON_KEY_SET": bool(SUPABASE_ANON_KEY),
-    "API_BASE": API_BASE
-}
-
-if not USE_SUPABASE and not API_BASE:
-    raise ValueError(f"请设置 NOTES_API_URL 环境变量或启用 USE_SUPABASE\n调试信息: {debug_info}")
-
 print(f"📦 Notes 模块启动模式: {'Supabase Cloud' if USE_SUPABASE else 'Local API'}")
 print(f"   URL: {SUPABASE_URL[:30]}..." if SUPABASE_URL else "   URL: 未设置")
-print(f"   调试: {debug_info}")
 
 
 # ========== 统一 API 接口 ==========
@@ -68,18 +56,29 @@ def _api(method: str, path: str, token: str | None = None, payload: dict[str, An
 # ========== Supabase 客户端 ==========
 
 _supabase_client = None
+_supabase_auth = None
 
 def get_supabase_client():
     """获取 Supabase 客户端"""
-    global _supabase_client
+    global _supabase_client, _supabase_auth
     if _supabase_client is None and SUPABASE_URL and SUPABASE_ANON_KEY:
         try:
-            from supabase import create_client
+            from supabase import create_client, Client
             _supabase_client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
-        except ImportError:
-            print("⚠️ 请安装 supabase: pip install supabase")
+            # 新版 supabase 需要单独获取 auth
+            _supabase_auth = _supabase_client.auth
+        except ImportError as e:
+            print(f"⚠️ 请安装 supabase: {e}")
             _supabase_client = False
+            _supabase_auth = False
     return _supabase_client
+
+def get_supabase_auth():
+    """获取 Supabase Auth"""
+    global _supabase_auth
+    if _supabase_auth is None:
+        get_supabase_client()
+    return _supabase_auth
 
 
 # ========== 认证相关 ==========
@@ -87,16 +86,17 @@ def get_supabase_client():
 def sign_up(email: str, password: str, username: str):
     """注册"""
     if USE_SUPABASE:
-        client = get_supabase_client()
-        if not client:
+        auth = get_supabase_auth()
+        if not auth:
             return False, {"error": "Supabase 未配置"}
         try:
-            auth = client.auth.sign_up({
+            # 新版 supabase 注册
+            result = auth.sign_up({
                 "email": email,
                 "password": password,
                 "options": {"data": {"username": username}}
             })
-            return True, auth
+            return True, result
         except Exception as e:
             return False, {"error": str(e)}
     else:
@@ -106,12 +106,16 @@ def sign_up(email: str, password: str, username: str):
 def sign_in(email: str, password: str):
     """登录"""
     if USE_SUPABASE:
-        client = get_supabase_client()
-        if not client:
+        auth = get_supabase_auth()
+        if not auth:
             return False, {"error": "Supabase 未配置"}
         try:
-            auth = client.auth.sign_in_with_password({"email": email, "password": password})
-            return True, auth
+            # 新版 supabase 登录
+            result = auth.sign_in_with_password({
+                "email": email,
+                "password": password
+            })
+            return True, result
         except Exception as e:
             return False, {"error": str(e)}
     else:
@@ -120,18 +124,21 @@ def sign_in(email: str, password: str):
 
 def sign_out():
     """登出"""
-    client = get_supabase_client()
-    if client:
-        client.auth.sign_out()
+    auth = get_supabase_auth()
+    if auth:
+        try:
+            auth.sign_out()
+        except Exception:
+            pass
 
 
 def get_current_user():
     """获取当前用户"""
     if USE_SUPABASE:
-        client = get_supabase_client()
-        if client:
+        auth = get_supabase_auth()
+        if auth:
             try:
-                session = client.auth.get_session()
+                session = auth.get_session()
                 return session.user if session else None
             except Exception:
                 return None
@@ -144,10 +151,10 @@ def get_current_user():
 def get_current_token():
     """获取当前 token"""
     if USE_SUPABASE:
-        client = get_supabase_client()
-        if client:
+        auth = get_supabase_auth()
+        if auth:
             try:
-                session = client.auth.get_session()
+                session = auth.get_session()
                 return session.access_token if session else None
             except Exception:
                 return None
