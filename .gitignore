@@ -14,3 +14,4 @@ data/models/*
 
 # local share package archives
 Package-File/*.zip
+.streamlit/secrets.toml
