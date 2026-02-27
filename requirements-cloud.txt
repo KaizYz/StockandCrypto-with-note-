@@ -1,0 +1,19 @@
+# StockAndCrypto Cloud - Requirements
+# 用于 Streamlit Cloud 部署
+
+# Streamlit UI
+streamlit>=1.30.0
+
+# Supabase (PostgreSQL + Auth)
+supabase>=2.0.0
+
+# HTTP requests
+requests>=2.31.0
+
+# Data & Charts
+pandas>=2.1.0
+numpy>=1.26.0
+plotly>=5.18.0
+
+# Utils
+python-dateutil>=2.8.0

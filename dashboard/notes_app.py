@@ -1,214 +1,307 @@
-"""Notes 模块的最小可用 Streamlit 页面。"""
+"""
+StockAndCrypto Notes - 统一版 UI
+支持两种模式:
+- 本地开发: NOTES_API_URL=http://127.0.0.1:5001
+- 云端部署: USE_SUPABASE=true + SUPABASE_URL + SUPABASE_ANON_KEY
+"""
 
 from __future__ import annotations
 
 import os
 from typing import Any
 
-import requests
 import streamlit as st
 
-API_BASE = os.getenv("NOTES_API_URL", "http://127.0.0.1:5001").rstrip("/")
+# 导入统一配置
+from notes_config import (
+    sign_up, sign_in, sign_out, get_current_user, get_current_token,
+    create_note, get_notes,
+    create_trade_plan, get_trade_plans, like_plan,
+    get_chat_boards, get_chat_messages, send_chat_message,
+    USE_SUPABASE
+)
 
+st.set_page_config(page_title="StockAndCrypto Notes", page_icon="📈", layout="wide")
 
-def _api(method: str, path: str, token: str | None = None, payload: dict[str, Any] | None = None):
-    url = f"{API_BASE}{path}"
-    headers = {}
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
-    try:
-        resp = requests.request(method=method, url=url, headers=headers, json=payload, timeout=10)
-    except requests.RequestException as exc:
-        return False, {"error": f"请求失败: {exc}"}
-    try:
-        data = resp.json()
-    except ValueError:
-        data = {"error": f"HTTP {resp.status_code}: {resp.text[:200]}"}
-    if resp.ok:
-        return True, data
-    return False, data
+if "user" not in st.session_state:
+    st.session_state["user"] = None
+if "token" not in st.session_state:
+    st.session_state["token"] = None
 
+# 初始化用户
+current_user = get_current_user()
+if current_user:
+    st.session_state["user"] = current_user
 
-def _login_panel():
-    st.subheader("登录 / 注册")
+# ========== UI 组件 ==========
+
+def login_panel():
+    """登录/注册面板"""
+    st.subheader("🔐 登录 / 注册")
     login_tab, register_tab = st.tabs(["登录", "注册"])
 
     with login_tab:
-        username = st.text_input("用户名", key="login_username")
-        password = st.text_input("密码", type="password", key="login_password")
+        username = st.text_input("用户名 / 邮箱", key="login_user")
+        password = st.text_input("密码", type="password", key="login_pass")
         if st.button("登录", key="btn_login"):
-            ok, data = _api("POST", "/api/auth/login", payload={"username": username, "password": password})
+            # 尝试用户名或邮箱登录
+            if "@" in username:
+                ok, data = sign_in(username, password)
+            else:
+                # 本地模式用 username，Supabase 用 email
+                if USE_SUPABASE:
+                    ok, data = sign_in(username, password)  # Supabase 用邮箱
+                else:
+                    ok, data = sign_in(username, password)
+
             if ok:
-                st.session_state["token"] = data.get("token")
-                st.session_state["user"] = data.get("user")
-                st.success("登录成功")
+                st.session_state["user"] = get_current_user()
+                st.session_state["token"] = get_current_token()
+                st.success("登录成功!")
                 st.rerun()
             else:
                 st.error(data.get("error", "登录失败"))
 
     with register_tab:
-        username = st.text_input("新用户名", key="reg_username")
+        username = st.text_input("用户名", key="reg_user")
         email = st.text_input("邮箱", key="reg_email")
-        password = st.text_input("新密码", type="password", key="reg_password")
-        if st.button("注册", key="btn_register"):
-            ok, data = _api(
-                "POST",
-                "/api/auth/register",
-                payload={"username": username, "email": email, "password": password},
-            )
+        password = st.text_input("密码", type="password", key="reg_pass")
+        if st.button("注册", key="btn_reg"):
+            ok, data = sign_up(email, password, username)
             if ok:
-                st.success("注册成功，请回到登录页登录")
+                st.success("注册成功! 请登录")
             else:
                 st.error(data.get("error", "注册失败"))
 
 
-def _notes_page(token: str):
-    st.subheader("我的笔记")
-    with st.form("create_note"):
-        title = st.text_input("标题")
-        content = st.text_area("内容", height=140)
-        tags = st.text_input("标签（逗号分隔）")
-        is_public = st.checkbox("公开到社区", value=False)
-        submitted = st.form_submit_button("创建笔记")
-    if submitted:
-        ok, data = _api(
-            "POST",
-            "/api/notes",
-            token=token,
-            payload={
-                "title": title,
-                "content": content,
-                "tags": tags,
-                "is_public": is_public,
-                "note_type": "NOTE",
-            },
-        )
-        if ok:
-            st.success("创建成功")
-        else:
-            st.error(data.get("error", "创建失败"))
+def notes_page():
+    """笔记页面"""
+    st.title("📝 笔记")
 
-    ok, data = _api("GET", "/api/notes?mine=true&page_size=50", token=token)
-    if not ok:
-        st.error(data.get("error", "读取笔记失败"))
-        return
-    items = data.get("items", [])
-    if not items:
-        st.info("还没有笔记")
-    for item in items:
-        with st.expander(f"{item.get('title')}  · {'公开' if item.get('is_public') else '私密'}"):
-            st.write(item.get("content", ""))
-            tags = item.get("tags") or []
-            if tags:
-                st.caption("标签: " + ", ".join(tags))
+    # 创建笔记
+    with st.expander("新建笔记", expanded=False):
+        with st.form("new_note"):
+            title = st.text_input("标题")
+            content = st.text_area("内容", height=120)
             col1, col2 = st.columns(2)
-            if col1.button("公开", key=f"pub_{item['id']}"):
-                _api("POST", f"/api/notes/{item['id']}/publish", token=token)
-                st.rerun()
-            if col2.button("取消公开", key=f"unpub_{item['id']}"):
-                _api("POST", f"/api/notes/{item['id']}/unpublish", token=token)
-                st.rerun()
+            is_public = col1.checkbox("公开分享", value=False)
+            tags_raw = col2.text_input("标签 (逗号分隔)")
+            tags = [t.strip() for t in tags_raw.split(",") if t.strip()]
+
+            if st.form_submit_button("保存"):
+                ok, result = create_note(title, content, is_public, tags)
+                if ok:
+                    st.success("笔记创建成功!")
+                    st.rerun()
+                else:
+                    st.error(result.get("error", "创建失败"))
+
+    # 我的笔记
+    st.markdown("### 我的笔记")
+    notes = get_notes(mine_only=True)
+    if not notes:
+        st.info("还没有笔记")
+
+    for note in notes:
+        visible = "🔓" if note.get("is_public") else "🔒"
+        with st.expander(f"{visible} {note.get('title', '无标题')}"):
+            st.write(note.get("content", ""))
+            tags = note.get("tags", [])
+            if tags:
+                st.caption(f"标签: {', '.join(tags) if isinstance(tags, list) else tags}")
+            st.caption(f"更新时间: {note.get('updated_at', note.get('created_at', ''))[:10]}")
+
+    # 公开笔记
+    st.markdown("### 社区笔记")
+    public_notes = get_notes(mine_only=False)
+    user_id = str(st.session_state.get("user", {}).get("id", "")) if USE_SUPABASE else st.session_state.get("user", {}).get("id")
+
+    for note in notes:
+        note_user_id = str(note.get("user_id"))
+        if note_user_id != str(user_id):
+            with st.expander(f"👤 {note.get('title', '无标题')}"):
+                st.write(note.get("content", ""))
 
 
-def _community_page(token: str):
-    st.subheader("社区公开内容")
-    ok, notes_data = _api("GET", "/api/community/notes?page_size=20", token=token)
-    if not ok:
-        st.error(notes_data.get("error", "读取社区笔记失败"))
-    else:
-        for row in notes_data.get("items", []):
-            st.markdown(f"**{row.get('title', '')}** · @{row.get('username', '-')}")
-            st.write(row.get("content", ""))
-            st.caption(f"点赞: {row.get('like_count', 0)}")
-            st.divider()
+def trade_plans_page():
+    """交易计划页面"""
+    st.title("📊 交易计划")
 
-    st.subheader("交易计划")
-    ok, plans_data = _api("GET", "/api/trade-plans?page_size=20", token=token)
-    if not ok:
-        st.error(plans_data.get("error", "读取交易计划失败"))
-        return
-    for plan in plans_data.get("items", []):
-        st.markdown(f"**{plan.get('title', '')}** ({plan.get('symbol', '-')})")
-        st.write(plan.get("analysis", ""))
-        st.caption(
-            f"置信度: {plan.get('confidence_level')} | 点赞: {plan.get('like_count', 0)} | 浏览: {plan.get('views', 0)}"
-        )
-        if st.button("点赞计划", key=f"plan_like_{plan['id']}"):
-            ok_like, like_data = _api("POST", f"/api/trade-plans/{plan['id']}/like", token=token)
-            if ok_like:
-                st.success("已点赞")
-            else:
-                st.error(like_data.get("error", "点赞失败"))
+    # 发布计划
+    with st.expander("发布交易计划", expanded=False):
+        with st.form("new_plan"):
+            col1, col2 = st.columns(2)
+            symbol = col1.text_input("标的 (BTCUSD, AAPL)", placeholder="BTCUSD").upper()
+            direction = col2.selectbox("方向", ["LONG", "SHORT"])
+
+            col_a, col_b, col_c = st.columns(3)
+            entry_price = col_a.number_input("入场价", min_value=0.0, format="%.2f")
+            stop_loss = col_b.number_input("止损", min_value=0.0, format="%.2f")
+            take_profit = col_c.number_input("止盈", min_value=0.0, format="%.2f")
+
+            title = st.text_input("计划标题")
+            analysis = st.text_area("分析理由", height=80)
+            confidence = st.slider("置信度", 1, 5, 3)
+
+            if st.form_submit_button("发布"):
+                if not symbol or not title:
+                    st.error("请填写标的和标题")
+                else:
+                    ok, result = create_trade_plan(
+                        symbol, title, analysis, direction,
+                        entry_price, stop_loss, take_profit, confidence
+                    )
+                    if ok:
+                        st.success("计划发布成功!")
+                        st.rerun()
+                    else:
+                        st.error(result.get("error", "发布失败"))
+
+    # 筛选
+    filter_symbol = st.text_input("筛选标的").upper()
+
+    # 计划列表
+    st.markdown("### 活跃计划")
+    plans = get_trade_plans(symbol=filter_symbol if filter_symbol else None)
+
+    if not plans:
+        st.info("暂无交易计划")
+
+    for plan in plans:
+        symbol = plan.get("symbol", "")
+        direction = plan.get("direction", "LONG")
+        direction_emoji = "🟢" if direction == "LONG" else "🔴"
+
+        st.markdown(f"""
+        **{direction_emoji} {symbol}** | {plan.get('title', '')}
+        - 入场: {plan.get('entry_price', 0):.2f} | 止损: {plan.get('stop_loss', 0):.2f} | 止盈: {plan.get('take_profit', 0):.2f}
+        - 盈亏比: **{plan.get('risk_reward_ratio', 0)}** | 置信度: {"⭐" * plan.get('confidence_level', 0)}
+        """)
+        st.caption(f"分析: {plan.get('analysis', '')[:150]}...")
+
+        col_like, _ = st.columns([1, 6])
+        if col_like.button("👍 点赞", key=f"like_{plan.get('id')}"):
+            like_plan(plan.get('id'))
+            st.rerun()
+
         st.divider()
 
 
-def _chat_page(token: str):
-    st.subheader("版块聊天")
-    ok, data = _api("GET", "/api/chat/boards", token=token)
-    if not ok:
-        st.error(data.get("error", "读取版块失败"))
-        return
-    boards = data.get("items", [])
+def chat_page():
+    """群聊页面"""
+    st.title("💬 交易社区")
+
+    boards = get_chat_boards()
+    board_names = [b["name"] for b in boards] if boards else ["BTC讨论区", "股票交流区", "外汇策略区"]
+
     if not boards:
-        st.info("暂无版块")
-        return
-    board_map = {f"{b['name']} (#{b['id']})": b for b in boards}
-    selected_label = st.selectbox("选择版块", options=list(board_map.keys()))
-    board = board_map[selected_label]
+        # 使用默认名称
+        board_names = ["BTC讨论区", "股票交流区", "外汇策略区"]
+        boards = [{"id": i+1, "name": name} for i, name in enumerate(board_names)]
 
-    col1, col2 = st.columns(2)
-    if col1.button("加入版块"):
-        _api("POST", f"/api/chat/boards/{board['id']}/join", token=token)
-    if col2.button("离开版块"):
-        _api("POST", f"/api/chat/boards/{board['id']}/leave", token=token)
+    selected_idx = st.selectbox("选择版块", range(len(board_names)), format_func=lambda x: board_names[x])
+    board = boards[selected_idx] if boards else {"id": selected_idx+1, "name": board_names[selected_idx]}
+    board_id = board.get("id", selected_idx + 1)
 
-    ok_msg, msg_data = _api("GET", f"/api/chat/boards/{board['id']}/messages?limit=50", token=token)
-    if not ok_msg:
-        st.error(msg_data.get("error", "读取消息失败"))
+    # 消息列表
+    messages = get_chat_messages(board_id)
+    for msg in messages:
+        user_name = "匿名"
+        if isinstance(msg.get("users"), dict):
+            user_name = msg.get("users", {}).get("username", "匿名")
+        elif USE_SUPABASE and isinstance(msg.get("profiles"), dict):
+            user_name = msg.get("profiles", {}).get("username", "匿名")
+
+        st.write(f"**{user_name}**: {msg.get('content', '')}")
+        time_str = msg.get('created_at', '')
+        if isinstance(time_str, str) and len(time_str) > 19:
+            time_str = time_str[:19]
+        st.caption(time_str)
+
+    # 发送消息
+    with st.form("send_msg"):
+        content = st.text_input("消息内容", placeholder="说点什么...")
+        if st.form_submit_button("发送"):
+            if content:
+                ok, _ = send_chat_message(board_id, content)
+                if ok:
+                    st.rerun()
+                else:
+                    st.error("发送失败，请先登录")
+
+
+def stats_page():
+    """统计页面"""
+    st.title("📈 交易统计")
+
+    plans = get_trade_plans()
+    if plans:
+        longs = [p for p in plans if p.get("direction") == "LONG"]
+        shorts = [p for p in plans if p.get("direction") == "SHORT"]
+
+        col1, col2, col3 = st.columns(3)
+        col1.metric("多头计划", len(longs))
+        col2.metric("空头计划", len(shorts))
+        col3.metric("总计划", len(plans))
+
+        st.bar_chart({"多头": len(longs), "空头": len(shorts)})
+
+        # 按标的统计
+        symbols = {}
+        for p in plans:
+            sym = p.get("symbol", "其他")
+            symbols[sym] = symbols.get(sym, 0) + 1
+
+        if symbols:
+            st.subheader("标的分布")
+            st.bar_chart(symbols)
     else:
-        for msg in msg_data.get("items", []):
-            st.markdown(f"**@{msg.get('username', '-')}:** {msg.get('content', '')}")
+        st.info("暂无交易计划数据")
 
-    content = st.text_input("发送消息", key=f"board_input_{board['id']}")
-    if st.button("发送", key=f"send_btn_{board['id']}"):
-        ok_send, send_data = _api(
-            "POST",
-            f"/api/chat/boards/{board['id']}/messages",
-            token=token,
-            payload={"content": content},
-        )
-        if ok_send:
-            st.rerun()
+
+# ========== 主应用 ==========
+
+with st.sidebar:
+    st.title("📈 StockAndCrypto")
+    st.markdown("---")
+
+    mode = "☁️ 云端 (Supabase)" if USE_SUPABASE else "🏠 本地 API"
+    st.caption(f"运行模式: {mode}")
+
+    page = st.radio("导航", ["笔记", "交易计划", "群聊", "统计"])
+
+    st.markdown("---")
+
+    # 用户信息
+    if st.session_state["user"]:
+        user = st.session_state["user"]
+        if USE_SUPABASE:
+            user_name = user.email if hasattr(user, 'email') else str(user).split('@')[0] if '@' in str(user) else "用户"
         else:
-            st.error(send_data.get("error", "发送失败"))
-
-
-def main():
-    st.set_page_config(page_title="StockandCrypto Notes", page_icon="📝", layout="wide")
-    st.title("📝 StockandCrypto Notes")
-    st.caption(f"API: {API_BASE}")
-
-    token = st.session_state.get("token")
-    user = st.session_state.get("user")
-
-    if not token:
-        _login_panel()
-        return
-
-    st.sidebar.success(f"当前用户: {user.get('username') if isinstance(user, dict) else '-'}")
-    if st.sidebar.button("退出登录"):
-        st.session_state.pop("token", None)
-        st.session_state.pop("user", None)
-        st.rerun()
-
-    menu = st.sidebar.radio("导航", options=["我的笔记", "社区", "版块聊天"])
-    if menu == "我的笔记":
-        _notes_page(token)
-    elif menu == "社区":
-        _community_page(token)
+            user_name = user.get("username", "用户")
+        st.write(f"👤 **{user_name}**")
+        if st.button("退出登录"):
+            sign_out()
+            st.session_state["user"] = None
+            st.session_state["token"] = None
+            st.rerun()
     else:
-        _chat_page(token)
+        st.write("👤 **未登录**")
 
+    st.markdown("---")
+    st.caption("支持: 笔记 | 交易日记 | 交易计划 | 社区分享 | 群聊")
 
-if __name__ == "__main__":
-    main()
+# 主页面
+if not st.session_state["user"] and page != "统计":
+    login_panel()
+elif page == "笔记":
+    notes_page()
+elif page == "交易计划":
+    trade_plans_page()
+elif page == "群聊":
+    chat_page()
+elif page == "统计":
+    stats_page()
+
+st.markdown("---")
+st.caption(f"StockAndCrypto Notes | 模式: {'Supabase Cloud' if USE_SUPABASE else 'Local API'}")
